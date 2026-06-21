@@ -1,156 +1,151 @@
-// Setup Command
-const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+// Setup Command (Interactive Dashboard)
+const {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    RoleSelectMenuBuilder,
+    ChannelSelectMenuBuilder,
+    ChannelType,
+    EmbedBuilder,
+    PermissionFlagsBits
+} = require('discord.js');
 
-const CONFIG_PATH = path.join(__dirname, '..', '..', 'config.json');
+/**
+ * Generates the interactive setup dashboard components and embeds.
+ * @param {import('discord.js').Guild} guild - The Discord guild object
+ * @param {object} config - The bot's current configuration object
+ * @returns {object} - The message payload containing embeds and components
+ */
+function getSetupDashboard(guild, config) {
+    const monitoredCount = Object.keys(config.monitored_channels || {}).length;
 
-// Helper to save configuration
-function saveConfig(config) {
-    try {
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-        return true;
-    } catch (error) {
-        console.error('Error writing config.json:', error);
-        return false;
-    }
+    // Determine completion status of each configuration option
+    const hasBypassRole = config.CAN_PROMOTE_ROLE_ID && !config.CAN_PROMOTE_ROLE_ID.includes('YOUR_');
+    const hasCounterVc = config.MEMBER_COUNT_VC_ID && !config.MEMBER_COUNT_VC_ID.includes('YOUR_');
+    const hasPingsChannel = config.GAMING_PINGS_CHANNEL_ID && !config.GAMING_PINGS_CHANNEL_ID.includes('YOUR_');
+    const hasLogChannel = config.SECURE_ADMIN_LOG_CHANNEL_ID && !config.SECURE_ADMIN_LOG_CHANNEL_ID.includes('YOUR_');
+    const hasPrison = config.JAILED_ROLE_ID && config.PRISON_CHANNEL_ID &&
+                      !config.JAILED_ROLE_ID.includes('YOUR_') && !config.PRISON_CHANNEL_ID.includes('YOUR_');
+
+    // Build the status embed with indicators
+    const statusEmbed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('⚙️ Te-Amo Setup Dashboard')
+        .setDescription('Configure bot settings interactively using the dropdowns and buttons below. Completion statuses are logged in real-time:')
+        .addFields(
+            { 
+                name: `${hasBypassRole ? '✅' : '❌'} Anti-Promo Bypass Role`, 
+                value: hasBypassRole ? `<@&${config.CAN_PROMOTE_ROLE_ID}>` : '*Not configured*', 
+                inline: true 
+            },
+            { 
+                name: `${hasCounterVc ? '✅' : '❌'} Member Counter VC`, 
+                value: hasCounterVc ? `<#${config.MEMBER_COUNT_VC_ID}>` : '*Not configured*', 
+                inline: true 
+            },
+            { 
+                name: `${hasPingsChannel ? '✅' : '❌'} Global Gaming Pings`, 
+                value: hasPingsChannel ? `<#${config.GAMING_PINGS_CHANNEL_ID}>` : '*Not configured*', 
+                inline: true 
+            },
+            { 
+                name: `${hasLogChannel ? '✅' : '❌'} Security Logs Channel`, 
+                value: hasLogChannel ? `<#${config.SECURE_ADMIN_LOG_CHANNEL_ID}>` : '*Not configured*', 
+                inline: true 
+            },
+            { 
+                name: `${hasPrison ? '✅' : '❌'} Prison / Jail System`, 
+                value: hasPrison ? `Role: <@&${config.JAILED_ROLE_ID}>\nChannel: <#${config.PRISON_CHANNEL_ID}>` : '*Not configured*', 
+                inline: true 
+            },
+            { 
+                name: '🔊 Monitored Voice VCs', 
+                value: `\`${monitoredCount} channel(s) active\``, 
+                inline: true 
+            }
+        )
+        .setFooter({ text: 'Te-Amo Setup Tracker', iconURL: guild.iconURL() })
+        .setTimestamp();
+
+    // Row 1: Bypass Role dropdown
+    const roleRow = new ActionRowBuilder().addComponents(
+        new RoleSelectMenuBuilder()
+            .setCustomId('setup_bypassrole')
+            .setPlaceholder('🛡️ Select Anti-Promo Bypass Role')
+            .setMinValues(1)
+            .setMaxValues(1)
+    );
+
+    // Row 2: Counter VC dropdown (Filtered to Voice)
+    const counterRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_countervc')
+            .setPlaceholder('📊 Select Member Counter Voice VC')
+            .setChannelTypes([ChannelType.GuildVoice])
+            .setMinValues(1)
+            .setMaxValues(1)
+    );
+
+    // Row 3: Global Gaming Pings text channel (Filtered to Text)
+    const pingsRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_pingschannel')
+            .setPlaceholder('💬 Select Global Gaming Pings Text Channel')
+            .setChannelTypes([ChannelType.GuildText])
+            .setMinValues(1)
+            .setMaxValues(1)
+    );
+
+    // Row 4: Security Log text channel (Filtered to Text)
+    const logsRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_logchannel')
+            .setPlaceholder('📝 Select Security Logs Text Channel')
+            .setChannelTypes([ChannelType.GuildText])
+            .setMinValues(1)
+            .setMaxValues(1)
+    );
+
+    // Row 5: Action Buttons (Track VC, Edit VC, Untrack VC, Setup Prison, Done)
+    const buttonRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('setup_trackvc_btn')
+            .setLabel('➕ Track')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('setup_editvc_btn')
+            .setLabel('✏️ Edit')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(monitoredCount === 0),
+        new ButtonBuilder()
+            .setCustomId('setup_untrackvc_btn')
+            .setLabel('➖ Untrack')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(monitoredCount === 0),
+        new ButtonBuilder()
+            .setCustomId('setup_prison_btn')
+            .setLabel('🏛️ Setup Prison')
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('setup_done_btn')
+            .setLabel('🔒 Done')
+            .setStyle(ButtonStyle.Success)
+    );
+
+    return { embeds: [statusEmbed], components: [roleRow, counterRow, pingsRow, logsRow, buttonRow] };
 }
 
 module.exports = {
     name: 'setup',
-    description: 'Dynamic configuration command for administrators.',
+    description: 'Dynamic visual configuration dashboard for server administrators.',
     async execute(message, args, config) {
         // Enforce Admin permission
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ Error: Only server administrators can use this command!').catch(console.error);
         }
 
-        const subCommand = args[0] ? args[0].toLowerCase() : null;
-
-        if (!subCommand) {
-            return message.reply(
-                '⚙️ **Setup Usage:**\n' +
-                '- `!setup status`: Show current config\n' +
-                '- `!setup bypassrole <role_id/mention>`: Config anti-promo bypass role\n' +
-                '- `!setup countervc <vc_id/mention>`: Config voice member counter VC\n' +
-                '- `!setup logchannel <channel_id/mention>`: Config secure admin log channel\n' +
-                '- `!setup pingschannel <channel_id/mention>`: Config global gaming pings text channel\n' +
-                '- `!setup trackvc <vc_id> <targetCount> <roleId> <gameName>`: Register dynamic voice channel tracker\n' +
-                '- `!setup untrackvc <vc_id>`: Remove voice channel tracker'
-            ).catch(console.error);
-        }
-
-        const parseId = (str) => {
-            if (!str) return null;
-            return str.replace(/\D/g, '') || null;
-        };
-
-        // 1. Status Check
-        if (subCommand === 'status') {
-            const monitoredCount = Object.keys(config.monitored_channels || {}).length;
-            
-            const statusEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle('📊 Bot Configuration Status')
-                .addFields(
-                    { name: 'Anti-Promo Bypass Role', value: config.CAN_PROMOTE_ROLE_ID && !config.CAN_PROMOTE_ROLE_ID.includes('YOUR_') ? `<@&${config.CAN_PROMOTE_ROLE_ID}> (\`${config.CAN_PROMOTE_ROLE_ID}\`)` : '🔴 Not configured' },
-                    { name: 'Member Counter Voice VC', value: config.MEMBER_COUNT_VC_ID && !config.MEMBER_COUNT_VC_ID.includes('YOUR_') ? `<#${config.MEMBER_COUNT_VC_ID}> (\`${config.MEMBER_COUNT_VC_ID}\`)` : '🔴 Not configured' },
-                    { name: 'Secure Log Channel', value: config.SECURE_ADMIN_LOG_CHANNEL_ID && !config.SECURE_ADMIN_LOG_CHANNEL_ID.includes('YOUR_') ? `<#${config.SECURE_ADMIN_LOG_CHANNEL_ID}> (\`${config.SECURE_ADMIN_LOG_CHANNEL_ID}\`)` : '🔴 Not configured' },
-                    { name: 'Global Gaming Pings Channel', value: config.GAMING_PINGS_CHANNEL_ID && !config.GAMING_PINGS_CHANNEL_ID.includes('YOUR_') ? `<#${config.GAMING_PINGS_CHANNEL_ID}> (\`${config.GAMING_PINGS_CHANNEL_ID}\`)` : '🔴 Not configured' },
-                    { name: 'Anti-Nuke Threshold', value: `\`${config.ANTI_NUKE_THRESHOLD} actions / ${config.ANTI_NUKE_TIMEFRAME_MS / 1000}s\`` },
-                    { name: 'Monitored Voice Channels', value: `\`${monitoredCount}\` channel(s) currently being monitored.` }
-                )
-                .setTimestamp();
-
-            return message.reply({ embeds: [statusEmbed] }).catch(console.error);
-        }
-
-        // 2. Bypass Role Update
-        if (subCommand === 'bypassrole') {
-            const roleId = parseId(args[1]);
-            if (!roleId) return message.reply('Please provide a valid Role ID or role mention.').catch(console.error);
-
-            config.CAN_PROMOTE_ROLE_ID = roleId;
-            if (saveConfig(config)) {
-                return message.reply(`✅ Successfully updated Anti-Promo bypass role to <@&${roleId}>!`).catch(console.error);
-            }
-        }
-
-        // 3. Counter VC Update
-        if (subCommand === 'countervc') {
-            const vcId = parseId(args[1]);
-            if (!vcId) return message.reply('Please provide a valid Voice Channel ID or channel mention.').catch(console.error);
-
-            config.MEMBER_COUNT_VC_ID = vcId;
-            if (saveConfig(config)) {
-                return message.reply(`✅ Successfully updated User Counter VC to <#${vcId}>!`).catch(console.error);
-            }
-        }
-
-        // 4. Security Log Channel Update
-        if (subCommand === 'logchannel') {
-            const channelId = parseId(args[1]);
-            if (!channelId) return message.reply('Please provide a valid Text Channel ID or channel mention.').catch(console.error);
-
-            config.SECURE_ADMIN_LOG_CHANNEL_ID = channelId;
-            if (saveConfig(config)) {
-                return message.reply(`✅ Successfully updated Security Log Channel to <#${channelId}>!`).catch(console.error);
-            }
-        }
-
-        // 5. Global Gaming Pings Channel Update
-        if (subCommand === 'pingschannel') {
-            const channelId = parseId(args[1]);
-            if (!channelId) return message.reply('Please provide a valid Text Channel ID or channel mention.').catch(console.error);
-
-            config.GAMING_PINGS_CHANNEL_ID = channelId;
-            if (saveConfig(config)) {
-                return message.reply(`✅ Successfully updated Global Gaming Pings Channel to <#${channelId}>!`).catch(console.error);
-            }
-        }
-
-        // 6. Track VC mapping
-        if (subCommand === 'trackvc') {
-            // Args: vc_id, targetCount, roleId, gameName
-            const targetVcId = parseId(args[1]);
-            const targetCount = parseInt(args[2]);
-            const roleId = parseId(args[3]);
-            const gameName = args.slice(4).join(' ');
-
-            if (!targetVcId || isNaN(targetCount) || !roleId || !gameName) {
-                return message.reply('Usage: `!setup trackvc <vc_id> <targetCount> <roleId> <gameName>`').catch(console.error);
-            }
-
-            if (!config.monitored_channels) {
-                config.monitored_channels = {};
-            }
-
-            config.monitored_channels[targetVcId] = {
-                gameName,
-                roleId,
-                targetCount
-            };
-
-            if (saveConfig(config)) {
-                return message.reply(`✅ Successfully configured voice channel <#${targetVcId}> to track **${gameName}** (Trigger: ${targetCount} members, Ping: <@&${roleId}>).`).catch(console.error);
-            }
-        }
-
-        // 7. Untrack VC mapping
-        if (subCommand === 'untrackvc') {
-            const targetVcId = parseId(args[1]);
-            if (!targetVcId) return message.reply('Please provide a valid Voice Channel ID.').catch(console.error);
-
-            if (!config.monitored_channels || !config.monitored_channels[targetVcId]) {
-                return message.reply('That voice channel is not currently being tracked.').catch(console.error);
-            }
-
-            delete config.monitored_channels[targetVcId];
-            if (saveConfig(config)) {
-                return message.reply('✅ Successfully removed voice channel tracker mapping!').catch(console.error);
-            }
-        }
-
-        return message.reply('❌ Invalid subcommand. Run `!setup` for commands guide.').catch(console.error);
-    }
+        const dashboard = getSetupDashboard(message.guild, config);
+        return message.reply(dashboard).catch(console.error);
+    },
+    getSetupDashboard
 };

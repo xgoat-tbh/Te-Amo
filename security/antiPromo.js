@@ -6,6 +6,7 @@ const offenses = new Map();
 
 /**
  * Scans a message for promotion links and handles progressive discipline.
+ * Supports dynamic warning strikes and timeout durations.
  * @param {import('discord.js').Message} message - The Discord message object
  * @param {object} config - The bot's configuration object
  */
@@ -36,48 +37,51 @@ async function handleMessage(message, config) {
             await message.delete();
         }
 
+        const strikesLimit = config.ANTI_PROMO_STRIKES_LIMIT || 2;
+        const timeoutDurationMins = config.ANTI_PROMO_TIMEOUT_DURATION_MINS || 10;
+
         const userId = message.author.id;
         const userOffenses = offenses.get(userId) || 0;
         const newOffenseCount = userOffenses + 1;
         offenses.set(userId, newOffenseCount);
 
-        if (newOffenseCount === 1) {
-            // 1st Offense: DM warning
+        if (newOffenseCount < strikesLimit) {
+            // Strike count is below limit: send a DM warning
             try {
                 await message.author.send(
-                    `⚠️ **Warning**: Promotion links are not allowed in **${message.guild.name}**. Your message has been deleted.`
+                    `⚠️ **Warning**: Promotion/invite links are not allowed in **${message.guild.name}**. Your message has been deleted. (Strike ${newOffenseCount}/${strikesLimit})`
                 );
             } catch (dmErr) {
-                // If DM is closed, notify in the channel temporarily or just ignore
+                // If DM fails, send a temporary warning in the text channel
                 const reply = await message.channel.send(
-                    `⚠️ <@${userId}>, promotion links are not allowed. (Failed to send DM warning: DMs closed)`
+                    `⚠️ <@${userId}>, promotion links are not allowed here. (Strike ${newOffenseCount}/${strikesLimit})`
                 );
                 setTimeout(() => reply.delete().catch(() => {}), 5000);
             }
         } else {
-            // 2nd+ Offense: 10-minute timeout
-            offenses.set(userId, 0); // Reset offense count after timeout
+            // Strike count exceeded limit: apply a timeout
+            offenses.set(userId, 0); // Reset user strikes after applying punishment
 
             try {
-                // Check if the bot can moderate the member
                 if (!member.moderatable) {
                     await message.channel.send(`⚠️ Could not timeout <@${userId}> (insufficient permissions).`);
                     return;
                 }
 
-                // Apply a 10-minute timeout (10 * 60 * 1000 ms)
-                await member.timeout(10 * 60 * 1000, 'Anti-Promotion: Repeated Offense');
+                // Apply a dynamic timeout duration
+                const timeoutMs = timeoutDurationMins * 60 * 1000;
+                await member.timeout(timeoutMs, `Anti-Promotion: Exceeded limit of ${strikesLimit} strikes`);
 
                 try {
                     await message.author.send(
-                        `🚫 You have been muted/timed out for 10 minutes in **${message.guild.name}** for repeated promotion/link sharing.`
+                        `🚫 You have been timed out for ${timeoutDurationMins} minutes in **${message.guild.name}** for repeated link sharing.`
                     );
                 } catch (dmErr) {
-                    // Ignore DM errors on mute
+                    // Ignore DM errors
                 }
 
                 await message.channel.send(
-                    `🚫 <@${userId}> has been timed out for 10 minutes for repeated promotion link violations.`
+                    `🚫 <@${userId}> has been timed out for ${timeoutDurationMins} minutes for repeated promotion link violations.`
                 );
             } catch (muteErr) {
                 console.error(`Failed to timeout user ${userId}:`, muteErr);

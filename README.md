@@ -8,24 +8,27 @@ A production-ready, highly secure, and modular Discord bot built with `discord.j
 /Te-Amo
 ├── /commands
 │   ├── /admin
-│   │   └── setup.js
+│   │   ├── settings.js        <-- Security settings dashboard
+│   │   └── setup.js           <-- Configuration dashboard
 │   ├── /general
 │   │   └── help.js
 │   └── /voice
 │       └── mv.js
 ├── /events
-│   ├── ready.js
+│   ├── ready.js               <-- Sets RPC status to "playing amo.gg"
 │   ├── messageCreate.js
 │   ├── voiceStateUpdate.js
 │   ├── guildMemberAdd.js
 │   ├── guildMemberRemove.js
 │   ├── guildAuditLogEntryCreate.js
+│   ├── interactionCreate.js   <-- Dashboard interactions
 │   └── memberCounter.js       <-- Rate-limiting helper
 ├── /security
-│   ├── antiNuke.js
-│   └── antiPromo.js
+│   ├── antiNuke.js            <-- Configurable punishments (Jail, Ban, Kick, Strip Roles)
+│   └── antiPromo.js           <-- Dynamic warning strikes and mutes
 ├── /utils
-│   └── gameMessages.js        <-- Randomized game alerts database
+│   ├── gameMessages.js        <-- Randomized game alerts database
+│   └── prisonHelper.js        <-- Prison creation & mapping module
 ├── config.json
 ├── package.json
 └── README.md
@@ -33,57 +36,57 @@ A production-ready, highly secure, and modular Discord bot built with `discord.j
 
 ## Features
 
-1. **Dynamic Multi-Game VC Ping Tracker**: Monitors Voice Channels listed in the `monitored_channels` config block.
+1. **Rich Presence Status**: Automatically displays a custom status of **"Playing amo.gg"** for the bot.
+2. **Dynamic Multi-Game VC Ping Tracker**: Monitors Voice Channels listed in the `monitored_channels` config block.
    - All alerts are routed to a **single global gaming text channel** (`GAMING_PINGS_CHANNEL_ID`).
    - Automatically ignores pings for excluded voice channels (e.g. channels containing `pc games`, `browser games`, or `activity games` in their names).
-   - Generates a **randomized gaming alert message** from a database of 10 custom, game-specific messages (e.g. for *Among Us*, *Monopoly*, *Skribble*, *BGMI*, *Codenames*, *Smashkarts*, *Stumble Guys*, *Call of Duty*, *Valorant*, or *Generic Games*).
+   - Generates a **randomized gaming alert message** from a database of 10 custom, game-specific messages.
    - Posts a visually appealing alert combining:
-     - The role mention: `<@&ROLE_ID>`
+     - The role ping: `<@&ROLE_ID>`
      - Emojis, custom text, and Voice Channel mention: `🎮 🔴 > [Random Message] > <#VC_ID>`
      - Direct voice channel URL link to render Discord's native **"Join Voice"** button card.
      - A custom Discord Embed showcasing lobby details and join prompts.
-2. **Advanced Move Command (`!mv`)**: Moves members concurrently using `Promise.all` with robust regex parsing:
+3. **Advanced Move Command (`!mv`)**: Moves members concurrently using `Promise.all` with robust regex parsing:
    - `!mv` - Moves everyone in caller's voice channel to the default monitored VC.
    - `!mv @User to <Channel>` - Moves specified users to a target voice channel.
    - `!mv all to <Channel>` - Moves everyone in caller's voice channel to a target voice channel.
-3. **Live User Counter**: Dynamically renames a voice channel (e.g. `📊 Members: 1,024`) as members join/leave the guild. Integrates a smart 10-minute rate-limiting queue to bypass Discord's rename limits.
-4. **Auto-Moderation (Anti-Promotion)**: Identifies invite and URL links. Admin users are bypassed via permissions or the `CAN_PROMOTE_ROLE_ID`. Employs warning alerts followed by a 10-minute timeout for repeat offences.
-5. **Ironclad Anti-Nuke System**: Monitors audit logs for mass channel deletions, member kicks, and bans. Admin accounts exceeding the rate threshold within the configured timeframe are immediately stripped of all roles to secure the guild.
+4. **Live User Counter**: Dynamically renames a voice channel (e.g. `📊 Members: 1,024`) as members join/leave the guild. Integrates a smart 10-minute rate-limiting queue to bypass Discord's rename limits.
+5. **Auto-Moderation (Anti-Promotion)**: Identifies invite and URL links. Admin users are bypassed via permissions or the `CAN_PROMOTE_ROLE_ID`. Supports customizable warning strikes and mute/timeout durations.
+6. **Ironclad Anti-Nuke System**: Monitors audit logs for mass channel deletions, member kicks, and bans. Rogue admins exceeding the rate threshold are immediately punished according to server configurations:
+   - **`Jail Rogue Admin` (Recommended)**: Strips all roles from the rogue admin, applies the `Jailed` role, and sends instant DM notifications to all server moderators informing them of the lockdown.
+   - `Strip Roles`: Strips all roles from the rogue admin.
+   - `Ban Rogue Admin`: Bans rogue admin immediately from the guild.
+   - `Kick Rogue Admin`: Kicks rogue admin from the guild.
+   - `Log Only`: Sends log warning without enforcing punishment.
 
-## Configuration Guide (`config.json`)
+---
 
-Configure your server credentials in [config.json](file:///D:/Te-Amo/config.json):
+## Configuration & Dashboards (Admin Only)
 
-```json
-{
-  "BOT_TOKEN": "YOUR_BOT_TOKEN_HERE",
-  "CAN_PROMOTE_ROLE_ID": "YOUR_CAN_PROMOTE_ROLE_ID_HERE",
-  "MEMBER_COUNT_VC_ID": "YOUR_MEMBER_COUNT_VC_ID_HERE",
-  "SECURE_ADMIN_LOG_CHANNEL_ID": "YOUR_SECURE_ADMIN_LOG_CHANNEL_ID_HERE",
-  "GAMING_PINGS_CHANNEL_ID": "YOUR_GAMING_PINGS_CHANNEL_ID_HERE",
-  "ANTI_NUKE_THRESHOLD": 3,
-  "ANTI_NUKE_TIMEFRAME_MS": 60000,
-  "monitored_channels": {
-    "VOICE_CHANNEL_ID": {
-      "gameName": "Among Us",
-      "roleId": "ROLE_ID_TO_PING",
-      "targetCount": 2
-    }
-  }
-}
-```
+Configure settings dynamically using interactive dashboards directly inside your Discord server.
 
-### Setup Commands (Admin Only)
+### 1. Setup Dashboard (`!setup`)
+Run `!setup` in any text channel to configure target channels and roles:
+- Use dropdown menus to set the anti-promo bypass role, member counter VC, global gaming pings channel, and security log channel.
+- **➕ Track**: Adds a monitored VC through a modal form.
+- **✏️ Edit**: Pre-populates a modal form with current VC details for easy editing.
+- **➖ Untrack**: Removes a monitored VC via a dropdown selection list.
+- **🏛️ Setup Prison**: Verifies if jail roles and channels already exist. If they do, they are linked in the setup status. If they do not, the bot automatically creates:
+  - A `Jailed` role with no default guild permissions.
+  - A Category named `JAIL` hidden from `@everyone` but readable by `Jailed`.
+  - A Text channel named `prison` inside the category.
+- **🔒 Done**: Locks and disables the setup dashboard components.
 
-Configure settings dynamically using in-Discord prefix commands:
+### 2. Security Dashboard (`!settings`)
+Run `!settings` in any text channel to configure security parameters:
+- **Anti-Nuke Punishment Action**: Choose between Jail, Strip Roles, Ban, Kick, or Log Only.
+- **Anti-Nuke Threshold**: Choose the action limit (2, 3, 5, or 10 actions/min).
+- **Anti-Promo strikes limit**: Choose strikes before timeout (1, 2, or 3 strikes).
+- Click **⏱️ Set Action Timeframe** to input the Anti-Nuke timeframe in seconds.
+- Click **⏳ Set Mute Duration** to input the Anti-Promo timeout duration in minutes.
+- Click **🔒 Done** to lock the settings dashboard.
 
-- `!setup status`: Show current config values.
-- `!setup bypassrole <role_id_or_mention>`: Set bypass role ID for link filters.
-- `!setup countervc <vc_id_or_mention>`: Set target voice channel ID for the member counter.
-- `!setup logchannel <channel_id_or_mention>`: Set channel ID for security lockdown alerts.
-- `!setup pingschannel <channel_id_or_mention>`: Set the global gaming pings text channel.
-- `!setup trackvc <vc_id> <targetCount> <roleId> <gameName>`: Adds/updates a tracked voice channel.
-- `!setup untrackvc <vc_id>`: Removes a voice channel from the tracker list.
+---
 
 ## Starting the Bot
 
