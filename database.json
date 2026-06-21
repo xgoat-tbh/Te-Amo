@@ -1,9 +1,17 @@
 {
   "users": {
     "1021765669185925150": {
-      "xp": 19,
+      "xp": 66,
       "level": 0,
-      "lastMessageTimestamp": 1782048901632,
+      "lastMessageTimestamp": 1782050668387,
+      "roles": [],
+      "isJailed": false,
+      "strikes": 0
+    },
+    "879926401690665000": {
+      "xp": 53,
+      "level": 0,
+      "lastMessageTimestamp": 1782050656050,
       "roles": [],
       "isJailed": false,
       "strikes": 0
