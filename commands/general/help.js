@@ -8,14 +8,34 @@ module.exports = {
         const helpEmbed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle('🤖 Te-Amo Bot Commands')
-            .setDescription('Here is a list of commands you can use with this bot:')
+            .setDescription('Here is a list of commands available in this server:')
             .addFields(
-                { name: '🔊 `!mv`', value: 'Moves everyone in your current voice channel into the default configured VC.' },
-                { name: '👥 `!mv <@user(s)> to <voice_channel>`', value: 'Moves specified user(s) to a target voice channel. \n*Examples:*\n`!mv @Lockdown to Among Us 1`\n`!mv me to #Among Us 2`\n`!mv all to 1234567890` (moves everyone in your VC)' },
-                { name: '⚙️ `!setup <option> <value>`', value: 'Dynamically configure bot settings without editing code.\n*Options:*\n`status` - Check current settings\n`bypassrole <id>` - Config Anti-Promo bypass role\n`countervc <id>` - Config Voice Channel for user counter\n`logchannel <id>` - Config log channel for security actions\n`pingschannel <id>` - Config global gaming pings channel\n`trackvc <vc_id> <targetCount> <roleId> <gameName>` - Register dynamic voice channel tracker\n`untrackvc <vc_id>` - Remove voice channel tracker' },
-                { name: '❓ `!help`', value: 'Displays this command guide.' }
+                { 
+                    name: '📊 General & Leveling', 
+                    value: 
+                        '• `!rank [user]` - View current level, XP, server ranking, and progress card.\n' +
+                        '• `!leaderboard` - Show the top 10 most active members on the server.' 
+                },
+                { 
+                    name: '🔊 Voice & Movement', 
+                    value: 
+                        '• `!mv` - Moves everyone in your voice channel to the default VC.\n' +
+                        '• `!mv <user/me/all> to <vc_name/id/mention>` - Concurrently moves target users to the target voice channel.\n' +
+                        '  *Examples:*\n' +
+                        '  `!mv @user to Among Us 1`\n' +
+                        '  `!mv me to #Gaming VC`\n' +
+                        '  `!mv all to 1518107937808318497`'
+                },
+                { 
+                    name: '⚙️ Administration & Security (Staff Only)', 
+                    value: 
+                        '• `!setup` - Launch the interactive setup panel (configure bypass roles, counters, logs, and prison voice/role settings).\n' +
+                        '• `!settings` - Launch the visual security settings panel (Anti-Nuke threshold, timeout lengths, and action detail configurations).\n' +
+                        '• `!shiftserver` - Shifts the bot active configuration to this server (resets channels/roles, preserves levels - Owner only).' 
+                }
             )
-            .setFooter({ text: 'Te-Amo Bot' })
+            .setThumbnail(message.client.user.displayAvatarURL())
+            .setFooter({ text: 'Te-Amo Bot Command Guide', iconURL: message.guild.iconURL() })
             .setTimestamp();
 
         return message.reply({ embeds: [helpEmbed] }).catch(console.error);

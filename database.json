@@ -1,0 +1,18 @@
+{
+  "users": {
+    "1021765669185925150": {
+      "xp": 19,
+      "level": 0,
+      "lastMessageTimestamp": 1782048901632,
+      "roles": [],
+      "isJailed": false,
+      "strikes": 0
+    }
+  },
+  "nuke": {
+    "actions": {}
+  },
+  "tickets": {
+    "counter": 0
+  }
+}
