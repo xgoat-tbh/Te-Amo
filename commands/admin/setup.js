@@ -145,7 +145,14 @@ module.exports = {
         }
 
         const dashboard = getSetupDashboard(message.guild, config);
-        return message.reply(dashboard).catch(console.error);
+        const setupMsg = await message.reply(dashboard).catch(console.error);
+        if (setupMsg) {
+            if (!message.client.setupMessages) {
+                message.client.setupMessages = new Map();
+            }
+            message.client.setupMessages.set(message.guild.id, setupMsg);
+        }
+        return setupMsg;
     },
     getSetupDashboard
 };

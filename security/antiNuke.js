@@ -7,6 +7,7 @@ const adminActions = new Map();
 /**
  * Handles incoming audit log entries to protect the guild from administrative abuses.
  * Supports dynamic punishments: strip roles, ban, kick, jail, or log-only.
+ * Includes advanced hierarchy and permission safety checks to ensure robustness.
  * @param {import('discord.js').GuildAuditLogsEntry} auditEntry - The audit log entry
  * @param {import('discord.js').Guild} guild - The guild where the event occurred
  * @param {object} config - The bot's configuration object
@@ -53,68 +54,105 @@ async function handleAuditLog(auditEntry, guild, config) {
                 return;
             }
 
+            const botMember = guild.members.me || await guild.members.fetch(guild.client.user.id).catch(() => null);
+            if (!botMember) return;
+
+            const punishment = config.ANTI_NUKE_ACTION || 'jail';
             let actionTakenStr = '';
-            const punishment = config.ANTI_NUKE_ACTION || 'strip_roles';
+            let isPermError = false;
+            let isHierarchyError = false;
 
-            if (punishment === 'strip_roles') {
-                const rolesToRemove = executorMember.roles.cache.filter(role => role.id !== guild.id && role.editable);
-                if (rolesToRemove.size > 0) {
-                    await executorMember.roles.remove(rolesToRemove, 'Anti-Nuke Lockdown: Action threshold exceeded');
-                    actionTakenStr = `Stripped Roles: ${rolesToRemove.map(r => r.name).join(', ')}`;
-                } else {
-                    actionTakenStr = 'Strip Roles (Failed: No editable roles found)';
-                }
-            } else if (punishment === 'ban') {
-                if (executorMember.bannable) {
-                    await guild.members.ban(executorId, { reason: 'Anti-Nuke Lockdown: Action threshold exceeded' });
-                    actionTakenStr = 'Banned from Server';
-                } else {
-                    actionTakenStr = 'Ban punishment failed (Bot has insufficient permissions to ban this admin)';
-                }
-            } else if (punishment === 'kick') {
-                if (executorMember.kickable) {
-                    await executorMember.kick('Anti-Nuke Lockdown: Action threshold exceeded');
-                    actionTakenStr = 'Kicked from Server';
-                } else {
-                    actionTakenStr = 'Kick punishment failed (Bot has insufficient permissions to kick this admin)';
-                }
-            } else if (punishment === 'log') {
-                actionTakenStr = 'None (Log Only mode)';
-            } else if (punishment === 'jail') {
-                // 1. Strip all administrative/assignable roles
-                const rolesToRemove = executorMember.roles.cache.filter(role => role.id !== guild.id && role.editable);
-                if (rolesToRemove.size > 0) {
-                    await executorMember.roles.remove(rolesToRemove, 'Anti-Nuke Lockdown: Stripped roles before jail');
-                }
+            // Check if the bot can modify the target admin (Role Hierarchy restriction)
+            if (botMember.roles.highest.position <= executorMember.roles.highest.position) {
+                isHierarchyError = true;
+            }
 
-                // 2. Add the configured Jailed Role
-                const jailedRoleId = config.JAILED_ROLE_ID;
-                if (jailedRoleId && !jailedRoleId.includes('YOUR_')) {
-                    await executorMember.roles.add(jailedRoleId, 'Anti-Nuke Lockdown: Rogue admin jailed');
-                    actionTakenStr = `Jailed (Roles Stripped + Jailed Role Applied)`;
-
-                    // 3. DM all moderators/administrators to notify them of the jail event
-                    const guildMembers = await guild.members.fetch().catch(() => null);
-                    if (guildMembers) {
-                        const adminsToDM = guildMembers.filter(m => 
-                            m.permissions.has(PermissionFlagsBits.Administrator) && 
-                            !m.user.bot && 
-                            m.id !== executorId
-                        );
-
-                        for (const [id, mod] of adminsToDM) {
-                            try {
-                                await mod.send(
-                                    `🚨 **SECURITY ALERT**: Admin **${executorMember.user.tag}** (\`${executorId}\`) has been automatically **JAILED** in server **${guild.name}** for exceeding anti-nuke action thresholds.\n` +
-                                    `Their administrative roles have been stripped and the **Jailed** role has been applied. Please review the logs in the server immediately.`
-                                );
-                            } catch (dmErr) {
-                                console.error(`Failed to DM moderator ${mod.user.tag}:`, dmErr);
-                            }
+            if (!isHierarchyError) {
+                if (punishment === 'strip_roles') {
+                    if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                        isPermError = true;
+                    } else {
+                        const rolesToRemove = executorMember.roles.cache.filter(role => role.id !== guild.id && role.editable);
+                        if (rolesToRemove.size > 0) {
+                            await executorMember.roles.remove(rolesToRemove, 'Anti-Nuke Lockdown: Action threshold exceeded');
+                            actionTakenStr = `Stripped Roles: ${rolesToRemove.map(r => r.name).join(', ')}`;
+                        } else {
+                            actionTakenStr = 'Strip Roles (Failed: No editable roles found)';
                         }
                     }
-                } else {
-                    actionTakenStr = 'Jail punishment failed (Jailed Role ID is not configured)';
+                } else if (punishment === 'ban') {
+                    if (!botMember.permissions.has(PermissionFlagsBits.BanMembers)) {
+                        isPermError = true;
+                    } else if (executorMember.bannable) {
+                        await guild.members.ban(executorId, { reason: 'Anti-Nuke Lockdown: Action threshold exceeded' });
+                        actionTakenStr = 'Banned from Server';
+                    } else {
+                        actionTakenStr = 'Ban punishment failed (Target is not bannable)';
+                    }
+                } else if (punishment === 'kick') {
+                    if (!botMember.permissions.has(PermissionFlagsBits.KickMembers)) {
+                        isPermError = true;
+                    } else if (executorMember.kickable) {
+                        await executorMember.kick('Anti-Nuke Lockdown: Action threshold exceeded');
+                        actionTakenStr = 'Kicked from Server';
+                    } else {
+                        actionTakenStr = 'Kick punishment failed (Target is not kickable)';
+                    }
+                } else if (punishment === 'log') {
+                    actionTakenStr = 'None (Log Only mode)';
+                } else if (punishment === 'jail') {
+                    if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                        isPermError = true;
+                    } else {
+                        // 1. Strip all administrative/assignable roles
+                        const rolesToRemove = executorMember.roles.cache.filter(role => role.id !== guild.id && role.editable);
+                        if (rolesToRemove.size > 0) {
+                            await executorMember.roles.remove(rolesToRemove, 'Anti-Nuke Lockdown: Stripped roles before jail');
+                        }
+
+                        // 2. Add the Jailed Role
+                        const jailedRoleId = config.JAILED_ROLE_ID;
+                        if (jailedRoleId && !jailedRoleId.includes('YOUR_')) {
+                            await executorMember.roles.add(jailedRoleId, 'Anti-Nuke Lockdown: Rogue admin jailed');
+                            actionTakenStr = `Jailed (Roles Stripped + Jailed Role Applied)`;
+                        } else {
+                            actionTakenStr = 'Jail punishment failed (Jailed Role ID is not configured)';
+                        }
+                    }
+                }
+            }
+
+            // Handle errors
+            if (isHierarchyError) {
+                actionTakenStr = '⚠️ CRITICAL: Action failed due to Role Hierarchy (Target admin has a higher or equal role position than the bot).';
+            } else if (isPermError) {
+                actionTakenStr = `⚠️ CRITICAL: Action failed due to Insufficient Bot Permissions (Bot lacks required permissions for the configured action: ${punishment}).`;
+            }
+
+            // Send emergency DMs to all administrators/moderators
+            const guildMembers = await guild.members.fetch().catch(() => null);
+            if (guildMembers) {
+                const adminsToDM = guildMembers.filter(m => 
+                    m.permissions.has(PermissionFlagsBits.Administrator) && 
+                    !m.user.bot && 
+                    m.id !== executorId
+                );
+
+                const alertHeader = isHierarchyError || isPermError ? '🚨 **CRITICAL SECURITY FAILURE** 🚨' : '🚨 **SECURITY ALERT** 🚨';
+                const actionDetails = isHierarchyError || isPermError 
+                    ? `The bot attempted to punish them but **FAILED**.\n**Reason**: ${actionTakenStr}\n**URGENT**: Please intervene manually immediately to secure the server!`
+                    : `The bot has successfully taken action.\n**Punishment Applied**: \`${actionTakenStr}\``;
+
+                for (const [id, mod] of adminsToDM) {
+                    try {
+                        await mod.send(
+                            `${alertHeader}\n` +
+                            `Admin **${executorMember.user.tag}** (\`${executorId}\`) has triggered the **Anti-Nuke system** in server **${guild.name}** for performing too many administrative actions (${validTimestamps.length} actions in ${timeframe / 1000}s).\n\n` +
+                            `${actionDetails}`
+                        );
+                    } catch (dmErr) {
+                        console.error(`Failed to DM moderator ${mod.user.tag}:`, dmErr);
+                    }
                 }
             }
 
@@ -123,14 +161,19 @@ async function handleAuditLog(auditEntry, guild, config) {
             if (logChannelId) {
                 const logChannel = await guild.channels.fetch(logChannelId).catch(() => null);
                 if (logChannel && logChannel.isTextBased()) {
+                    const isFailure = isHierarchyError || isPermError;
+                    
                     const alertEmbed = new EmbedBuilder()
-                        .setColor(0xFF0000)
-                        .setTitle('🚨 ANTI-NUKE SECURITY LOCKDOWN')
-                        .setDescription(`Suspicious administrative activity has triggered security lockdown protocols.`)
+                        .setColor(isFailure ? 0xFF9900 : 0xFF0000) // Orange for hierarchy/permission failure, red for success nuke alert
+                        .setTitle(isFailure ? '⚠️ ANTI-NUKE PROTECTION BYPASSED' : '🚨 ANTI-NUKE SECURITY LOCKDOWN')
+                        .setDescription(isFailure 
+                            ? `Suspicious activity detected, but the bot was unable to enforce the punishment automatically.` 
+                            : `Suspicious administrative activity has triggered security lockdown protocols.`
+                        )
                         .addFields(
                             { name: 'Admin Account', value: `<@${executorId}> (\`${executorId}\`)` },
                             { name: 'Infraction Details', value: `Performed ${validTimestamps.length} channel deletions, kicks, or bans within ${timeframe / 1000}s (Limit: ${threshold}).` },
-                            { name: 'Punishment Applied', value: `\`${actionTakenStr}\`` }
+                            { name: 'Status / Action Taken', value: `\`${actionTakenStr}\`` }
                         )
                         .setTimestamp();
                     

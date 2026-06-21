@@ -2,7 +2,7 @@
 const { ChannelType, PermissionsBitField } = require('discord.js');
 
 /**
- * Checks if a "Jailed" role and "prison" text channel already exist in the guild.
+ * Checks if a "Jailed" role and "prison" voice channel already exist in the guild.
  * @param {import('discord.js').Guild} guild - The Discord guild object
  * @param {object} config - The bot's current configuration object
  * @returns {Promise<{role: import('discord.js').Role|null, channel: import('discord.js').GuildChannel|null}>}
@@ -32,11 +32,11 @@ async function verifyPrison(guild, config) {
             // Find category named "JAIL"
             const category = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'jail');
             if (category) {
-                // Find channel inside "JAIL" category
-                channel = channels.find(ch => ch.parentId === category.id && (ch.name.toLowerCase() === 'prison' || ch.name.toLowerCase() === 'jail')) || null;
+                // Find voice channel inside "JAIL" category
+                channel = channels.find(ch => ch.parentId === category.id && ch.type === ChannelType.GuildVoice && (ch.name.toLowerCase() === 'prison' || ch.name.toLowerCase() === 'jail')) || null;
             } else {
-                // Or just find any channel named "prison" or "jail"
-                channel = channels.find(ch => ch.type === ChannelType.GuildText && (ch.name.toLowerCase() === 'prison' || ch.name.toLowerCase() === 'jail')) || null;
+                // Or just find any Voice channel named "prison" or "jail"
+                channel = channels.find(ch => ch.type === ChannelType.GuildVoice && (ch.name.toLowerCase() === 'prison' || ch.name.toLowerCase() === 'jail')) || null;
             }
         }
     }
@@ -45,7 +45,7 @@ async function verifyPrison(guild, config) {
 }
 
 /**
- * Creates a "Jailed" role, "JAIL" category, and "prison" text channel with secure permissions.
+ * Creates a "Jailed" role, "JAIL" category, and "prison" voice channel with secure permissions.
  * @param {import('discord.js').Guild} guild - The Discord guild object
  * @returns {Promise<{roleId: string, channelId: string}>}
  */
@@ -57,36 +57,80 @@ async function createPrison(guild) {
         reason: 'Anti-Nuke Prison System Setup'
     });
 
-    // 2. Create the "JAIL" category channel with strict permissions
+    // 2. Create the "JAIL" category channel with strict permissions (blocks everyone, allows Jailed role)
     const jailCategory = await guild.channels.create({
         name: 'JAIL',
         type: ChannelType.GuildCategory,
         permissionOverwrites: [
             {
                 id: guild.roles.everyone.id,
-                deny: [PermissionsBitField.Flags.ViewChannel] // Hide for everyone
+                deny: [PermissionsBitField.Flags.ViewChannel] // Hide category for everyone
             },
             {
                 id: jailedRole.id,
                 allow: [
                     PermissionsBitField.Flags.ViewChannel,
-                    PermissionsBitField.Flags.SendMessages,
-                    PermissionsBitField.Flags.ReadMessageHistory
-                ] // Show only for Jailed role
+                    PermissionsBitField.Flags.Connect,
+                    PermissionsBitField.Flags.Speak
+                ] // Show and allow VC access only for Jailed role
             }
         ],
         reason: 'Anti-Nuke Prison System Setup'
     });
 
-    // 3. Create the "prison" text channel inside the category
-    const prisonChannel = await guild.channels.create({
+    // 3. Create the "prison" Voice Channel inside the category
+    const prisonVoiceChannel = await guild.channels.create({
         name: 'prison',
-        type: ChannelType.GuildText,
+        type: ChannelType.GuildVoice,
         parent: jailCategory.id,
         reason: 'Anti-Nuke Prison System Setup'
     });
 
-    return { roleId: jailedRole.id, channelId: prisonChannel.id };
+    // 4. Secure all other channels by denying ViewChannel to the Jailed role
+    await secureOtherChannels(guild, jailedRole.id, prisonVoiceChannel.id).catch(console.error);
+
+    return { roleId: jailedRole.id, channelId: prisonVoiceChannel.id };
 }
 
-module.exports = { verifyPrison, createPrison };
+/**
+ * Restricts all channels in the guild (except the prison channel and jail category)
+ * by denying the ViewChannel permission for the Jailed role.
+ * @param {import('discord.js').Guild} guild - The Discord guild object
+ * @param {string} jailedRoleId - The ID of the Jailed role
+ * @param {string} prisonChannelId - The ID of the prison Voice Channel
+ */
+async function secureOtherChannels(guild, jailedRoleId, prisonChannelId) {
+    if (!jailedRoleId || !prisonChannelId) return;
+
+    const channels = await guild.channels.fetch().catch(() => null);
+    if (!channels) return;
+
+    const prisonChannel = channels.get(prisonChannelId);
+    const jailCategoryId = prisonChannel ? prisonChannel.parentId : null;
+
+    const promises = [];
+    for (const [id, ch] of channels) {
+        if (id === prisonChannelId || id === jailCategoryId || (jailCategoryId && ch.parentId === jailCategoryId)) {
+            continue;
+        }
+
+        // Check if overwrite is already denying ViewChannel to avoid redundant API calls
+        const existingOverwrite = ch.permissionOverwrites.cache.get(jailedRoleId);
+        if (existingOverwrite && existingOverwrite.deny.has(PermissionsBitField.Flags.ViewChannel)) {
+            continue;
+        }
+
+        promises.push(
+            ch.permissionOverwrites.create(jailedRoleId, {
+                ViewChannel: false
+            }, { reason: 'Anti-Nuke Prison System: Hide channel from jailed users' })
+            .catch(err => console.error(`Failed to secure channel ${ch.name}:`, err.message))
+        );
+    }
+
+    if (promises.length > 0) {
+        await Promise.all(promises).catch(console.error);
+    }
+}
+
+module.exports = { verifyPrison, createPrison, secureOtherChannels };

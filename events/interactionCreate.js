@@ -10,13 +10,14 @@ const {
     ChannelSelectMenuBuilder,
     ChannelType,
     PermissionFlagsBits,
-    EmbedBuilder
+    EmbedBuilder,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const setupCommand = require('../commands/admin/setup');
 const settingsCommand = require('../commands/admin/settings');
-const { verifyPrison, createPrison } = require('../utils/prisonHelper');
+const { verifyPrison, createPrison, secureOtherChannels } = require('../utils/prisonHelper');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
@@ -39,7 +40,22 @@ module.exports = {
         const isSettingsComponent = interaction.customId && interaction.customId.startsWith('settings_');
 
         if ((isSetupComponent || isSettingsComponent) && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Error: Only server administrators can use these settings!', ephemeral: true });
+            return interaction.reply({ content: '❌ Error: Only server administrators can use these settings!', flags: MessageFlags.Ephemeral });
+        }
+
+        // Initialize active setup message map in client
+        if (!client.setupMessages) {
+            client.setupMessages = new Map();
+        }
+
+        // If this interaction is on the main setup dashboard, store the message reference
+        const isMainSetupDashboard = interaction.message && 
+            interaction.customId && 
+            interaction.customId.startsWith('setup_') && 
+            !['setup_prison_role_link', 'setup_prison_channel_link', 'setup_untrackvc_select', 'setup_editvc_select'].includes(interaction.customId);
+
+        if (isMainSetupDashboard) {
+            client.setupMessages.set(interaction.guild.id, interaction.message);
         }
 
         // 1. Dropdown Select Menu Handling
@@ -65,20 +81,45 @@ module.exports = {
                 updatedSetup = true;
             } else if (customId === 'setup_prison_role_link') {
                 config.JAILED_ROLE_ID = value;
-                updatedSetup = true;
-                await interaction.reply({ content: `✅ Linked Jailed Role to <@&${value}>.`, ephemeral: true }).catch(console.error);
+                if (saveConfig(config)) {
+                    await interaction.update({ content: `✅ Linked Jailed Role to <@&${value}>.`, components: [] }).catch(console.error);
+                    
+                    if (config.PRISON_CHANNEL_ID && !config.PRISON_CHANNEL_ID.includes('YOUR_')) {
+                        await secureOtherChannels(interaction.guild, value, config.PRISON_CHANNEL_ID).catch(console.error);
+                    }
+
+                    const mainDashboardMsg = client.setupMessages?.get(interaction.guild.id);
+                    if (mainDashboardMsg && mainDashboardMsg.editable) {
+                        const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
+                        await mainDashboardMsg.edit(newDashboard).catch(console.error);
+                    }
+                }
+                return;
             } else if (customId === 'setup_prison_channel_link') {
                 config.PRISON_CHANNEL_ID = value;
-                updatedSetup = true;
-                await interaction.reply({ content: `✅ Linked Prison Channel to <#${value}>.`, ephemeral: true }).catch(console.error);
+                if (saveConfig(config)) {
+                    await interaction.update({ content: `✅ Linked Prison Voice Channel to <#${value}>.`, components: [] }).catch(console.error);
+
+                    if (config.JAILED_ROLE_ID && !config.JAILED_ROLE_ID.includes('YOUR_')) {
+                        await secureOtherChannels(interaction.guild, config.JAILED_ROLE_ID, value).catch(console.error);
+                    }
+
+                    const mainDashboardMsg = client.setupMessages?.get(interaction.guild.id);
+                    if (mainDashboardMsg && mainDashboardMsg.editable) {
+                        const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
+                        await mainDashboardMsg.edit(newDashboard).catch(console.error);
+                    }
+                }
+                return;
             } else if (customId === 'setup_untrackvc_select') {
                 if (config.monitored_channels && config.monitored_channels[value]) {
                     delete config.monitored_channels[value];
                     if (saveConfig(config)) {
                         await interaction.update({ content: `✅ Voice Channel <#${value}> is no longer being monitored.`, components: [] }).catch(console.error);
-                        if (interaction.message && interaction.message.editable) {
+                        const mainDashboardMsg = client.setupMessages?.get(interaction.guild.id);
+                        if (mainDashboardMsg && mainDashboardMsg.editable) {
                             const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
-                            await interaction.message.edit(newDashboard).catch(console.error);
+                            await mainDashboardMsg.edit(newDashboard).catch(console.error);
                         }
                         return;
                     }
@@ -87,7 +128,7 @@ module.exports = {
                 // Edit VC selected: Open Modal with current details pre-populated
                 const currentData = config.monitored_channels[value];
                 if (!currentData) {
-                    return interaction.reply({ content: '❌ Selected voice channel data not found.', ephemeral: true });
+                    return interaction.reply({ content: '❌ Selected voice channel data not found.', flags: MessageFlags.Ephemeral });
                 }
 
                 const modal = new ModalBuilder()
@@ -147,14 +188,8 @@ module.exports = {
 
             // Save and Refresh setup dashboard
             if (updatedSetup && saveConfig(config)) {
-                // If it is a follow-up interaction, we edit the original message
-                if (interaction.message && interaction.message.editable) {
-                    const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
-                    await interaction.message.edit(newDashboard).catch(console.error);
-                } else {
-                    const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
-                    await interaction.update(newDashboard).catch(console.error);
-                }
+                const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
+                await interaction.update(newDashboard).catch(console.error);
             }
 
             // Save and Refresh settings dashboard
@@ -215,7 +250,7 @@ module.exports = {
             if (customId === 'setup_editvc_btn') {
                 const channels = Object.keys(config.monitored_channels || {});
                 if (channels.length === 0) {
-                    return interaction.reply({ content: '❌ No voice channels are currently being tracked to edit.', ephemeral: true });
+                    return interaction.reply({ content: '❌ No voice channels are currently being tracked to edit.', flags: MessageFlags.Ephemeral });
                 }
 
                 const options = await Promise.all(channels.map(async (vcId) => {
@@ -235,13 +270,13 @@ module.exports = {
                     .addOptions(options);
 
                 const row = new ActionRowBuilder().addComponents(editSelect);
-                await interaction.reply({ content: '✏️ Choose a Voice Channel to edit:', components: [row], ephemeral: true }).catch(console.error);
+                await interaction.reply({ content: '✏️ Choose a Voice Channel to edit:', components: [row], flags: MessageFlags.Ephemeral }).catch(console.error);
             }
 
             if (customId === 'setup_untrackvc_btn') {
                 const channels = Object.keys(config.monitored_channels || {});
                 if (channels.length === 0) {
-                    return interaction.reply({ content: '❌ No voice channels are currently being tracked.', ephemeral: true });
+                    return interaction.reply({ content: '❌ No voice channels are currently being tracked.', flags: MessageFlags.Ephemeral });
                 }
 
                 const options = await Promise.all(channels.map(async (vcId) => {
@@ -261,25 +296,25 @@ module.exports = {
                     .addOptions(options);
 
                 const row = new ActionRowBuilder().addComponents(untrackSelect);
-                await interaction.reply({ content: '🗑️ Choose a tracked Voice Channel to remove from monitoring:', components: [row], ephemeral: true }).catch(console.error);
+                await interaction.reply({ content: '🗑️ Choose a tracked Voice Channel to remove from monitoring:', components: [row], flags: MessageFlags.Ephemeral }).catch(console.error);
             }
 
             if (customId === 'setup_prison_btn') {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                 
                 // Verify if prison role and channel exist
                 const { role, channel } = await verifyPrison(interaction.guild, config);
 
                 if (role && channel) {
-                    // Already exist: Prompt links
+                    // Already exist: Prompt links (Filtered to Voice Channels for jail VC)
                     const roleSelect = new RoleSelectMenuBuilder()
                         .setCustomId('setup_prison_role_link')
                         .setPlaceholder('🏛️ Select Existing Jailed Role');
                     
                     const channelSelect = new ChannelSelectMenuBuilder()
                         .setCustomId('setup_prison_channel_link')
-                        .setPlaceholder('🏛️ Select Existing Prison Channel')
-                        .setChannelTypes([ChannelType.GuildText]);
+                        .setPlaceholder('🏛️ Select Existing Prison Voice Channel')
+                        .setChannelTypes([ChannelType.GuildVoice]); // Filtered to Voice!
 
                     const row1 = new ActionRowBuilder().addComponents(roleSelect);
                     const row2 = new ActionRowBuilder().addComponents(channelSelect);
@@ -303,6 +338,9 @@ module.exports = {
                         }
                     }
 
+                    // Secure all other channels immediately
+                    await secureOtherChannels(interaction.guild, role.id, channel.id).catch(console.error);
+
                     await interaction.editReply({
                         content: '🏛️ **Jail role/channel already exists in the server!**\nThey have been auto-configured in the setup. If you want to link different ones, choose below:',
                         components: [row1, row2]
@@ -321,7 +359,7 @@ module.exports = {
                                 const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
                                 await interaction.message.edit(newDashboard).catch(console.error);
                             }
-                            await interaction.editReply({ content: '🏛️ **Jail Category, prison channel, and Jailed role have been created and linked successfully!**' }).catch(console.error);
+                            await interaction.editReply({ content: '🏛️ **Jail Category, prison Voice Channel, and Jailed role have been created and linked successfully!**' }).catch(console.error);
                         }
                     } catch (err) {
                         console.error('Failed to create prison elements:', err);
@@ -396,7 +434,7 @@ module.exports = {
                 const targetCount = parseInt(rawTargetCount);
 
                 if (!vcId || isNaN(targetCount) || !roleId || !gameName) {
-                    return interaction.reply({ content: '❌ Invalid form submission. Check input values.', ephemeral: true });
+                    return interaction.reply({ content: '❌ Invalid form submission. Check input values.', flags: MessageFlags.Ephemeral });
                 }
 
                 if (!config.monitored_channels) {
@@ -405,10 +443,11 @@ module.exports = {
 
                 config.monitored_channels[vcId] = { gameName, roleId, targetCount };
 
+                await interaction.deferUpdate().catch(console.error);
                 if (saveConfig(config)) {
                     const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
-                    await interaction.update(newDashboard).catch(console.error);
-                    await interaction.followUp({ content: `` + `✅ Monitored Channel added: <#${vcId}> for **${gameName}**!`, ephemeral: true }).catch(console.error);
+                    await interaction.editReply(newDashboard).catch(console.error);
+                    await interaction.followUp({ content: `✅ Monitored Channel added: <#${vcId}> for **${gameName}**!`, flags: MessageFlags.Ephemeral }).catch(console.error);
                 }
             }
 
@@ -424,17 +463,19 @@ module.exports = {
                 const targetCount = parseInt(rawTargetCount);
 
                 if (!vcId || isNaN(targetCount) || !roleId || !gameName) {
-                    return interaction.reply({ content: '❌ Invalid form submission. Check input values.', ephemeral: true });
+                    return interaction.reply({ content: '❌ Invalid form submission. Check input values.', flags: MessageFlags.Ephemeral });
                 }
 
+                await interaction.deferUpdate().catch(console.error);
                 if (config.monitored_channels && config.monitored_channels[vcId]) {
                     config.monitored_channels[vcId] = { gameName, roleId, targetCount };
                     if (saveConfig(config)) {
-                        await interaction.update({ content: `✅ Voice Channel <#${vcId}> details updated successfully!`, components: [] }).catch(console.error);
+                        await interaction.editReply({ content: `✅ Voice Channel <#${vcId}> details updated successfully!`, components: [] }).catch(console.error);
                         
-                        if (interaction.message && interaction.message.editable) {
+                        const mainDashboardMsg = client.setupMessages?.get(interaction.guild.id);
+                        if (mainDashboardMsg && mainDashboardMsg.editable) {
                             const newDashboard = setupCommand.getSetupDashboard(interaction.guild, config);
-                            await interaction.message.edit(newDashboard).catch(console.error);
+                            await mainDashboardMsg.edit(newDashboard).catch(console.error);
                         }
                     }
                 }
@@ -446,13 +487,14 @@ module.exports = {
                 const seconds = parseInt(rawTime);
 
                 if (isNaN(seconds) || seconds <= 0) {
-                    return interaction.reply({ content: '❌ Error: Timeframe must be a positive number of seconds.', ephemeral: true });
+                    return interaction.reply({ content: '❌ Error: Timeframe must be a positive number of seconds.', flags: MessageFlags.Ephemeral });
                 }
 
+                await interaction.deferUpdate().catch(console.error);
                 config.ANTI_NUKE_TIMEFRAME_MS = seconds * 1000;
                 if (saveConfig(config)) {
                     const newSettings = settingsCommand.getSettingsDashboard(interaction.guild, config);
-                    await interaction.update(newSettings).catch(console.error);
+                    await interaction.editReply(newSettings).catch(console.error);
                 }
             }
 
@@ -462,13 +504,14 @@ module.exports = {
                 const minutes = parseInt(rawMins);
 
                 if (isNaN(minutes) || minutes <= 0) {
-                    return interaction.reply({ content: '❌ Error: Timeout duration must be a positive number of minutes.', ephemeral: true });
+                    return interaction.reply({ content: '❌ Error: Timeout duration must be a positive number of minutes.', flags: MessageFlags.Ephemeral });
                 }
 
+                await interaction.deferUpdate().catch(console.error);
                 config.ANTI_PROMO_TIMEOUT_DURATION_MINS = minutes;
                 if (saveConfig(config)) {
                     const newSettings = settingsCommand.getSettingsDashboard(interaction.guild, config);
-                    await interaction.update(newSettings).catch(console.error);
+                    await interaction.editReply(newSettings).catch(console.error);
                 }
             }
         }

@@ -6,7 +6,7 @@ const offenses = new Map();
 
 /**
  * Scans a message for promotion links and handles progressive discipline.
- * Supports dynamic warning strikes and timeout durations.
+ * Includes permissions checks and role hierarchy protection.
  * @param {import('discord.js').Message} message - The Discord message object
  * @param {object} config - The bot's configuration object
  */
@@ -31,10 +31,21 @@ async function handleMessage(message, config) {
         return;
     }
 
+    const botMember = message.guild.members.me || await message.guild.members.fetch(message.client.user.id).catch(() => null);
+    if (!botMember) return;
+
     try {
-        // Delete the promotion message
-        if (message.deletable) {
-            await message.delete();
+        // 1. Delete message (requires Manage Messages permission)
+        if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            if (message.deletable) {
+                await message.delete().catch(console.error);
+            }
+        } else {
+            console.warn('[Anti-Promo] Warning: Bot lacks "Manage Messages" permission to delete link.');
+            await message.channel.send('⚠️ Link filter triggered: Bot lacks "Manage Messages" permission to delete the promotion link. Please grant permissions.').then(msg => {
+                setTimeout(() => msg.delete().catch(() => {}), 5000);
+            }).catch(() => {});
+            return;
         }
 
         const strikesLimit = config.ANTI_PROMO_STRIKES_LIMIT || 2;
@@ -46,29 +57,34 @@ async function handleMessage(message, config) {
         offenses.set(userId, newOffenseCount);
 
         if (newOffenseCount < strikesLimit) {
-            // Strike count is below limit: send a DM warning
+            // Send warning
             try {
                 await message.author.send(
                     `⚠️ **Warning**: Promotion/invite links are not allowed in **${message.guild.name}**. Your message has been deleted. (Strike ${newOffenseCount}/${strikesLimit})`
                 );
             } catch (dmErr) {
-                // If DM fails, send a temporary warning in the text channel
                 const reply = await message.channel.send(
                     `⚠️ <@${userId}>, promotion links are not allowed here. (Strike ${newOffenseCount}/${strikesLimit})`
                 );
                 setTimeout(() => reply.delete().catch(() => {}), 5000);
             }
         } else {
-            // Strike count exceeded limit: apply a timeout
-            offenses.set(userId, 0); // Reset user strikes after applying punishment
+            // Apply Timeout punishment
+            offenses.set(userId, 0); // Reset strikes count
+
+            // Hierarchy Check: Check if bot can moderate this member
+            if (botMember.roles.highest.position <= member.roles.highest.position) {
+                await message.channel.send(`⚠️ Security Failure: Could not timeout <@${userId}> (User has a higher/equal role than the bot).`);
+                return;
+            }
+
+            // Permission Check: Check if bot has Moderate Members permission
+            if (!botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                await message.channel.send(`⚠️ Security Failure: Could not timeout <@${userId}> (Bot lacks "Moderate Members" permission).`);
+                return;
+            }
 
             try {
-                if (!member.moderatable) {
-                    await message.channel.send(`⚠️ Could not timeout <@${userId}> (insufficient permissions).`);
-                    return;
-                }
-
-                // Apply a dynamic timeout duration
                 const timeoutMs = timeoutDurationMins * 60 * 1000;
                 await member.timeout(timeoutMs, `Anti-Promotion: Exceeded limit of ${strikesLimit} strikes`);
 
