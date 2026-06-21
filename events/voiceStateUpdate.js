@@ -23,6 +23,39 @@ module.exports = {
             if (oldChannelId && monitoredChannels[oldChannelId]) {
                 await checkVoiceChannel(oldChannelId, monitoredChannels[oldChannelId], guild, config);
             }
+
+            // Custom Voice Connection Audit Logging
+            const logChannelId = config.SECURE_ADMIN_LOG_CHANNEL_ID;
+            if (logChannelId && !logChannelId.includes('YOUR_')) {
+                const logChannel = await guild.channels.fetch(logChannelId).catch(() => null);
+                if (logChannel && logChannel.isTextBased()) {
+                    const member = newState.member || oldState.member;
+                    const embed = new EmbedBuilder().setTimestamp();
+
+                    if (!oldChannelId && newChannelId) {
+                        // Joined VC
+                        embed.setColor(0x2ECC71) // Sleek green
+                             .setTitle('🔊 Voice Joined')
+                             .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                             .setDescription(`<@${member.id}> joined voice channel <#${newChannelId}>`);
+                        await logChannel.send({ embeds: [embed] }).catch(() => {});
+                    } else if (oldChannelId && newChannelId && oldChannelId !== newChannelId) {
+                        // Moved VC
+                        embed.setColor(0xF1C40F) // Sleek yellow
+                             .setTitle('🔊 Voice Moved')
+                             .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                             .setDescription(`<@${member.id}> moved from <#${oldChannelId}> to <#${newChannelId}>`);
+                        await logChannel.send({ embeds: [embed] }).catch(() => {});
+                    } else if (oldChannelId && !newChannelId) {
+                        // Left VC
+                        embed.setColor(0xE74C3C) // Sleek red
+                             .setTitle('🔊 Voice Left')
+                             .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                             .setDescription(`<@${member.id}> left voice channel <#${oldChannelId}>`);
+                        await logChannel.send({ embeds: [embed] }).catch(() => {});
+                    }
+                }
+            }
         }
     }
 };

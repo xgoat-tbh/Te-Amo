@@ -1,8 +1,6 @@
 // Anti-Nuke Security Module
 const { AuditLogEvent, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-
-// Store admin actions: adminId -> Array of timestamps
-const adminActions = new Map();
+const db = require('../utils/db');
 
 /**
  * Handles incoming audit log entries to protect the guild from administrative abuses.
@@ -29,19 +27,21 @@ async function handleAuditLog(auditEntry, guild, config) {
     const timeframe = config.ANTI_NUKE_TIMEFRAME_MS || 60000;
     const now = Date.now();
 
-    // Initialize or fetch the admin's action history
-    if (!adminActions.has(executorId)) {
-        adminActions.set(executorId, []);
+    // Fetch the admin's action history persistently
+    const nukeState = db.getNukeState();
+    if (!nukeState[executorId]) {
+        nukeState[executorId] = [];
     }
 
-    const timestamps = adminActions.get(executorId);
+    const timestamps = nukeState[executorId];
     
     // Track the new action timestamp
     timestamps.push(now);
 
     // Keep only timestamps within the sliding window timeframe
     const validTimestamps = timestamps.filter(t => now - t < timeframe);
-    adminActions.set(executorId, validTimestamps);
+    nukeState[executorId] = validTimestamps;
+    db.saveNukeState(nukeState);
 
     if (validTimestamps.length > threshold) {
         try {
@@ -104,17 +104,24 @@ async function handleAuditLog(auditEntry, guild, config) {
                     if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
                         isPermError = true;
                     } else {
-                        // 1. Strip all administrative/assignable roles
-                        const rolesToRemove = executorMember.roles.cache.filter(role => role.id !== guild.id && role.editable);
-                        if (rolesToRemove.size > 0) {
-                            await executorMember.roles.remove(rolesToRemove, 'Anti-Nuke Lockdown: Stripped roles before jail');
-                        }
-
-                        // 2. Add the Jailed Role
                         const jailedRoleId = config.JAILED_ROLE_ID;
                         if (jailedRoleId && !jailedRoleId.includes('YOUR_')) {
+                            // 1. Backup user's roles and set isJailed in the database
+                            const oldRoleIds = executorMember.roles.cache.filter(role => role.id !== guild.id && role.id !== jailedRoleId).map(role => role.id);
+                            const userData = db.getUser(executorId);
+                            userData.roles = oldRoleIds;
+                            userData.isJailed = true;
+                            db.saveUser(executorId, userData);
+
+                            // 2. Strip all administrative/assignable roles
+                            const rolesToRemove = executorMember.roles.cache.filter(role => role.id !== guild.id && role.editable);
+                            if (rolesToRemove.size > 0) {
+                                await executorMember.roles.remove(rolesToRemove, 'Anti-Nuke Lockdown: Stripped roles before jail');
+                            }
+
+                            // 3. Add the Jailed Role
                             await executorMember.roles.add(jailedRoleId, 'Anti-Nuke Lockdown: Rogue admin jailed');
-                            actionTakenStr = `Jailed (Roles Stripped + Jailed Role Applied)`;
+                            actionTakenStr = `Jailed (Original Roles Backed Up + Jailed Role Applied)`;
                         } else {
                             actionTakenStr = 'Jail punishment failed (Jailed Role ID is not configured)';
                         }
@@ -181,8 +188,10 @@ async function handleAuditLog(auditEntry, guild, config) {
                 }
             }
 
-            // Clear historical records for this admin to prevent redundant event triggers
-            adminActions.set(executorId, []);
+            // Clear historical records for this admin persistently to prevent redundant event triggers
+            const currentNukeState = db.getNukeState();
+            currentNukeState[executorId] = [];
+            db.saveNukeState(currentNukeState);
         } catch (err) {
             console.error('Error enforcing anti-nuke response:', err);
         }
