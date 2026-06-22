@@ -75,11 +75,10 @@ module.exports = {
             });
         }
 
-        // Add slash commands summary to help
         embed.addFields({
             name: '⚙️ SLASH CONFIGURATION COMMANDS',
-            value: '• `/settings` - Edit dynamic configurations (prefix, log channel, jail role, permit role)\n' +
-                   '• `/setup` - Configure logging, jail, and permit settings & displays server capabilities',
+            value: '• `/settings` - Edit dynamic configurations (prefix, log channel, jail role, permit role, member counter)\n' +
+                   '• `/setup` - Interactive setup panel utilizing dropdown select menus and buttons to configure server systems',
             inline: false
         });
 

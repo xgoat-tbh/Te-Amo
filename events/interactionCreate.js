@@ -1,10 +1,239 @@
-const { Events, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
+const {
+    Events,
+    PermissionFlagsBits,
+    EmbedBuilder,
+    MessageFlags,
+    ActionRowBuilder,
+    ChannelSelectMenuBuilder,
+    RoleSelectMenuBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ChannelType
+} = require('discord.js');
 const dbSetup = require('../database/dbSetup');
 const { updateMemberCounter } = require('./ready');
+
+const activeSetups = new Map();
+
+function getSetupDashboard(guild, session) {
+    const embed = new EmbedBuilder()
+        .setColor(0x00AEFF)
+        .setTitle('⚙️ Te-Amo Server Setup Wizard')
+        .setDescription('Configure your server logging, jail, permit roles, and member counters using the dropdown menus below.\n\n' +
+                         'All selections are ephemeral and will only be saved when you click **Save Configuration**.')
+        .addFields(
+            { 
+                name: '📁 Logging Room', 
+                value: session.logChannelId ? `<#${session.logChannelId}>` : '*Not Selected (Required)*', 
+                inline: true 
+            },
+            { 
+                name: '🔒 Jail Role', 
+                value: session.jailRoleId ? `<@&${session.jailRoleId}>` : '*Not Selected (Required)*', 
+                inline: true 
+            },
+            { 
+                name: '⚙️ Permit Role', 
+                value: session.authRoleId ? `<@&${session.authRoleId}>` : '*Not Selected (Required)*', 
+                inline: true 
+            },
+            { 
+                name: '📊 Member Counter', 
+                value: session.memberCounterId ? `<#${session.memberCounterId}>` : '*Not Selected (Optional)*', 
+                inline: true 
+            }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Te-Amo Setup Dashboard', iconURL: guild.iconURL() });
+
+    const logRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_log_channel')
+            .setPlaceholder('Select Logging Channel 📁')
+            .addChannelTypes(ChannelType.GuildText)
+    );
+
+    const jailRow = new ActionRowBuilder().addComponents(
+        new RoleSelectMenuBuilder()
+            .setCustomId('setup_jail_role')
+            .setPlaceholder('Select Jail Role 🔒')
+    );
+
+    const authRow = new ActionRowBuilder().addComponents(
+        new RoleSelectMenuBuilder()
+            .setCustomId('setup_auth_role')
+            .setPlaceholder('Select Permit / Authorization Role ⚙️')
+    );
+
+    const counterRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_member_counter')
+            .setPlaceholder('Select Member Counter VC 📊 (Optional)')
+            .addChannelTypes(ChannelType.GuildVoice)
+    );
+
+    const buttonRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('setup_confirm')
+            .setLabel('Save Configuration')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('setup_cancel')
+            .setLabel('Cancel Setup')
+            .setStyle(ButtonStyle.Danger)
+    );
+
+    return { embeds: [embed], components: [logRow, jailRow, authRow, counterRow, buttonRow] };
+}
 
 module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction, client, config) {
+        const guildId = interaction.guildId;
+
+        // Handle Setup components (Select menus and Buttons)
+        if (interaction.isAnySelectMenu() || interaction.isButton()) {
+            if (interaction.customId.startsWith('setup_')) {
+                // Verify user is an administrator
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({
+                        content: '❌ You must have **Administrator** permissions to use settings/setup components.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+
+                const session = activeSetups.get(guildId);
+                if (!session) {
+                    return interaction.reply({
+                        content: '❌ No active setup session found. Please run `/setup` again.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+
+                if (session.interactionUserId !== interaction.user.id) {
+                    return interaction.reply({
+                        content: '❌ You are not authorized to interact with this setup session.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+
+                // Handle Select Menu Changes
+                if (interaction.isAnySelectMenu()) {
+                    const selectedValue = interaction.values[0];
+
+                    if (interaction.customId === 'setup_log_channel') {
+                        session.logChannelId = selectedValue;
+                    } else if (interaction.customId === 'setup_jail_role') {
+                        if (selectedValue === guildId) {
+                            return interaction.reply({
+                                content: '❌ You cannot set the `@everyone` role as the Jail role.',
+                                flags: [MessageFlags.Ephemeral]
+                            });
+                        }
+                        session.jailRoleId = selectedValue;
+                    } else if (interaction.customId === 'setup_auth_role') {
+                        if (selectedValue === guildId) {
+                            return interaction.reply({
+                                content: '❌ You cannot set the `@everyone` role as the Permit role.',
+                                flags: [MessageFlags.Ephemeral]
+                            });
+                        }
+                        session.authRoleId = selectedValue;
+                    } else if (interaction.customId === 'setup_member_counter') {
+                        session.memberCounterId = selectedValue;
+                    }
+
+                    // Update dashboard embed
+                    const dashboard = getSetupDashboard(interaction.guild, session);
+                    return interaction.update(dashboard);
+                }
+
+                // Handle Buttons
+                if (interaction.isButton()) {
+                    if (interaction.customId === 'setup_cancel') {
+                        activeSetups.delete(guildId);
+                        return interaction.update({
+                            content: '❌ Setup cancelled. You can initiate a new setup with `/setup`.',
+                            embeds: [],
+                            components: []
+                        });
+                    }
+
+                    if (interaction.customId === 'setup_confirm') {
+                        if (!session.logChannelId || !session.jailRoleId || !session.authRoleId) {
+                            return interaction.reply({
+                                content: '❌ Please select a Logging Channel, Jail Role, and Permit Role before saving.',
+                                flags: [MessageFlags.Ephemeral]
+                            });
+                        }
+
+                        // Save to database
+                        dbSetup.updateSetup(guildId, session.logChannelId, session.jailRoleId, session.authRoleId, session.memberCounterId);
+
+                        // Dynamically configure category, Jailed role, and channel overrides
+                        await interaction.deferUpdate();
+                        await dbSetup.ensureJailSystem(interaction.guild).catch(console.error);
+
+                        // Sync member counter channel
+                        if (interaction.guild) {
+                            await updateMemberCounter(interaction.guild).catch(() => {});
+                        }
+
+                        const settingsData = dbSetup.getGuildSettings(guildId);
+                        const prefix = settingsData.prefix || '?';
+
+                        const finalEmbed = new EmbedBuilder()
+                            .setColor(0x00FF88)
+                            .setTitle('⚙️ Server Setup & Capabilities Overview')
+                            .setDescription('The bot configuration has been successfully updated. Below is the active configuration and capabilities summary.')
+                            .addFields(
+                                {
+                                    name: '🛠️ CONFIGURATION PARAMETERS',
+                                    value: `• **Logging Channel**: <#${session.logChannelId}>\n` +
+                                           `• **Jail Role**: <@&${session.jailRoleId}>\n` +
+                                           `• **Permit (Authorization) Role**: <@&${session.authRoleId}>\n` +
+                                           `• **Member Counter**: ${session.memberCounterId ? `<#${session.memberCounterId}>` : '*Not Configured*'}\n` +
+                                           `• **Standard Prefix**: \`${prefix}\``,
+                                    inline: false
+                                },
+                                {
+                                    name: '🏆 LEVELING SYSTEM',
+                                    value: `• **Grind Formula**: $XP = 100 \\times \\text{Level}^{2.5}$\n` +
+                                           `• **Chat XP**: 15–25 XP per message (60-second cooldown)\n` +
+                                           `• **Voice XP**: 10 XP per 5-minute interval (requires activity; self/server mute or deafen disqualifies)\n` +
+                                           `• **Milestone Roles Swapping**: Iterative roles swapping from **Commoner** (Lv. 1) to **Grandmaster** (Lv. 100) to prevent sidebar bloating.`,
+                                    inline: false
+                                },
+                                {
+                                    name: '🛡️ SPECIALIZED MODERATION',
+                                    value: `• **Moderation Commands**: \`${prefix}kick\`, \`${prefix}ban\`, \`${prefix}mute\` (supports smart duration parser e.g., \`10m\`, \`2h\`, \`1d\`)\n` +
+                                           `• **Jail Control**: \`${prefix}jail\` (assigns the jail role, strips standard roles) and \`${prefix}unjail\` (removes jail role, restores standard roles, bypasses leave-escape).`,
+                                    inline: false
+                                },
+                                {
+                                    name: '🎭 UTILITIES & CUSTOM TOOLS',
+                                    value: `• **Role Alias Protocol**: Custom triggers to toggle roles on members via permit authorization overrides (\`${prefix}alias create\`)\n` +
+                                           `• **VC Movement Tool (\`${prefix}mv\`)**: Moves voice members individually or collectively using regex VC resolution\n` +
+                                           `• **Voice Lobby Tracker**: Automated invite link triggers when VC user counts hit lobby milestones (with 15-minute anti-abuse map locks)\n` +
+                                           `• **Discohook Embed Loader**: Parse and send complex templates from Discohook exports using \`${prefix}embed send\`.`,
+                                    inline: false
+                                }
+                            )
+                            .setTimestamp()
+                            .setFooter({ text: 'Te-Amo Assistant Setup Completed', iconURL: interaction.guild.iconURL() });
+
+                        activeSetups.delete(guildId);
+
+                        return interaction.editReply({
+                            content: null,
+                            embeds: [finalEmbed],
+                            components: []
+                        });
+                    }
+                }
+            }
+        }
+
         if (!interaction.isChatInputCommand()) return;
 
         // Verify user is an administrator
@@ -15,7 +244,7 @@ module.exports = {
             });
         }
 
-        const { commandName, guildId } = interaction;
+        const { commandName } = interaction;
 
         if (commandName === 'settings') {
             const subcommand = interaction.options.getSubcommand();
@@ -25,7 +254,6 @@ module.exports = {
             let jailRoleId = currentSettings.jail_role_id;
             let authRoleId = currentSettings.auth_role_id;
             let memberCounterId = currentSettings.member_counter_channel_id;
-            let prefix = currentSettings.prefix || '?';
 
             if (subcommand === 'prefix') {
                 const newPrefix = interaction.options.getString('new_prefix');
@@ -95,75 +323,27 @@ module.exports = {
         }
 
         if (commandName === 'setup') {
-            const logChannel = interaction.options.getChannel('log_channel');
-            const jailRole = interaction.options.getRole('jail_role');
-            const authRole = interaction.options.getRole('auth_role');
-            const memberCounter = interaction.options.getChannel('member_counter');
-
-            if (jailRole.id === interaction.guild.id || authRole.id === interaction.guild.id) {
+            // Check if there is already an active session
+            if (activeSetups.has(guildId)) {
                 return interaction.reply({
-                    content: '❌ You cannot set the `@everyone` role as the Jail or Permit role.',
+                    content: '⚠️ A setup session is already in progress. Please use the existing dashboard message to configure the bot.',
                     flags: [MessageFlags.Ephemeral]
                 });
             }
 
-            const prefix = dbSetup.getGuildSettings(guildId).prefix || '?';
-            const memberCounterId = memberCounter ? memberCounter.id : null;
+            const session = {
+                logChannelId: null,
+                jailRoleId: null,
+                authRoleId: null,
+                memberCounterId: null,
+                interactionUserId: interaction.user.id
+            };
+            activeSetups.set(guildId, session);
 
-            // Save to database
-            dbSetup.updateSetup(guildId, logChannel.id, jailRole.id, authRole.id, memberCounterId);
-
-            // Dynamically auto-create/configure category, channels, and Jailed role overrides
-            await dbSetup.ensureJailSystem(interaction.guild).catch(console.error);
-
-            // Trigger immediate update of the counter channel if supplied
-            if (interaction.guild) {
-                await updateMemberCounter(interaction.guild);
-            }
-
-            // Construct capabilities setup embed
-            const embed = new EmbedBuilder()
-                .setColor(0x00FF88)
-                .setTitle('⚙️ Server Setup & Capabilities Overview')
-                .setDescription('The bot configuration has been successfully updated. Below is the active configuration and capabilities summary.')
-                .addFields(
-                    {
-                        name: '🛠️ CONFIGURATION PARAMETERS',
-                        value: `• **Logging Channel**: <#${logChannel.id}>\n` +
-                               `• **Jail Role**: <@&${jailRole.id}>\n` +
-                               `• **Permit (Authorization) Role**: <@&${authRole.id}>\n` +
-                               `• **Member Counter**: ${memberCounterId ? `<#${memberCounterId}>` : '*Not Configured*'}\n` +
-                               `• **Standard Prefix**: \`${prefix}\``,
-                        inline: false
-                    },
-                    {
-                        name: '🏆 LEVELING SYSTEM',
-                        value: `• **Grind Formula**: $XP = 100 \\times \\text{Level}^{2.5}$\n` +
-                               `• **Chat XP**: 15–25 XP per message (60-second cooldown)\n` +
-                               `• **Voice XP**: 10 XP per 5-minute interval (requires activity; self/server mute or deafen disqualifies)\n` +
-                               `• **Milestone Roles Swapping**: Iterative roles swapping from **Commoner** (Lv. 1) to **Grandmaster** (Lv. 100) to prevent sidebar bloating.`,
-                        inline: false
-                    },
-                    {
-                        name: '🛡️ SPECIALIZED MODERATION',
-                        value: `• **Moderation Commands**: \`${prefix}kick\`, \`${prefix}ban\`, \`${prefix}mute\` (supports smart duration parser e.g., \`10m\`, \`2h\`, \`1d\`)\n` +
-                               `• **Jail Control**: \`${prefix}jail\` (assigns the jail role, strips standard roles) and \`${prefix}unjail\` (removes jail role, restores standard roles, bypasses leave-escape).`,
-                        inline: false
-                    },
-                    {
-                        name: '🎭 UTILITIES & CUSTOM TOOLS',
-                        value: `• **Role Alias Protocol**: Custom triggers to toggle roles on members via permit authorization overrides (\`${prefix}alias create\`)\n` +
-                               `• **VC Movement Tool (\`${prefix}mv\`)**: Moves voice members individually or collectively using regex VC resolution\n` +
-                               `• **Voice Lobby Tracker**: Automated invite link triggers when VC user counts hit lobby milestones (with 15-minute anti-abuse map locks)\n` +
-                               `• **Discohook Embed Loader**: Parse and send complex templates from Discohook exports using \`${prefix}embed send\`.`,
-                        inline: false
-                    }
-                )
-                .setTimestamp()
-                .setFooter({ text: 'Te-Amo Assistant Setup', iconURL: interaction.guild.iconURL() });
+            const dashboard = getSetupDashboard(interaction.guild, session);
 
             return interaction.reply({
-                embeds: [embed],
+                ...dashboard,
                 flags: [MessageFlags.Ephemeral]
             });
         }

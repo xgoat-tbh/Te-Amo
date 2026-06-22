@@ -156,33 +156,7 @@ module.exports = {
 
             const setupCommand = {
                 name: 'setup',
-                description: 'Assign server settings, logging, jail, and member counter options',
-                options: [
-                    {
-                        name: 'log_channel',
-                        description: 'Channel to output admin logs',
-                        type: 7, // CHANNEL
-                        required: true
-                    },
-                    {
-                        name: 'jail_role',
-                        description: 'Role given to jailed users',
-                        type: 8, // ROLE
-                        required: true
-                    },
-                    {
-                        name: 'auth_role',
-                        description: 'Permit role authorized for mod actions/aliases',
-                        type: 8, // ROLE
-                        required: true
-                    },
-                    {
-                        name: 'member_counter',
-                        description: 'Channel to display the server member count',
-                        type: 7, // CHANNEL
-                        required: false
-                    }
-                ]
+                description: 'Interactive dashboard to configure logging, jail, and permit roles/channels'
             };
 
             await client.application.commands.set([settingsCommand, setupCommand]);

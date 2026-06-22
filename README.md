@@ -19,16 +19,21 @@ A production-ready, highly modular, and secure Discord bot built with `discord.j
 │   │   └── unjail.js        <-- Unjail command
 │   ├── /voice
 │   │   └── mv.js            <-- Advanced voice channel movement relocator
+│   ├── /admin
+│   │   ├── reset.js         <-- Purge database completely (Owner-only)
+│   │   ├── shift.js         <-- Migrate bot to new server via invite (Owner-only)
+│   │   ├── trackvc.js       <-- Monitor VC player milestone pings
+│   │   └── untrackvc.js     <-- Disable VC milestone monitoring
 │   └── /utility
 │       ├── rank.js          <-- Display level, XP, and rank progress bar
 │       ├── leaderboard.js   <-- Display top 10 users ranked by level/XP
-│       ├── alias.js         <-- Manage role phrase aliases
+│       ├── alias.js         <-- Manage role phrase aliases with custom descriptions
 │       ├── embed.js         <-- Discohook JSON payload embed sender
 │       └── help.js          <-- Dynamic categorizer & detailed command helper
 ├── /events
 │   ├── ready.js             <-- Slash registrations, voice XP checks, counter sync
 │   ├── messageCreate.js     <-- Prefix handler, text XP checks, role alias matches
-│   ├── interactionCreate.js <-- Slash setups and settings command routing
+│   ├── interactionCreate.js <-- Slash setups (interactive dropdown panel) and settings routing
 │   ├── voiceStateUpdate.js  <-- Game VC milestone pings and anti-abuse maps
 │   ├── guildMemberAdd.js    <-- Rejoin anti-jail check and member count updates
 │   └── guildMemberRemove.js <-- Member count updates
@@ -46,8 +51,9 @@ A production-ready, highly modular, and secure Discord bot built with `discord.j
 Uses `better-sqlite3` for local, lightweight database operations. Contains these tables:
 - `guild_settings`: Guild prefixes, logging channel, jail role, permit role, and member counter channel.
 - `jailed_users`: Traced user IDs of jailed members to prevent jail evasion on rejoin.
-- `role_aliases`: Text shortcuts mapped directly to role IDs.
+- `role_aliases`: Text shortcuts mapped directly to role IDs with custom descriptions.
 - `user_levels`: Level and XP records along with structural message cooldowns.
+- `monitored_vcs`: Active VC voice milestones, target pings, and roles.
 
 ### 2. Hardcore Leveling Ecosystem
 - **Mathematical Grind**: Progression is calculated using the exponential formula:
@@ -66,16 +72,24 @@ Uses `better-sqlite3` for local, lightweight database operations. Contains these
   - `?unjail @user`: Manually strips Jailed role and restores original manageable roles.
   - **Rejoin Protection**: Triggers on `guildMemberAdd` to re-apply the jail status if a user leaves and rejoins.
 
-### 4. Slash configurations & setup
-- `/setup`: Complete setup wizard that assigns the logging room, the jail role, the permit authorization role, and the **Member Counter Channel**. Displays a comprehensive capabilities embed of the bot.
-- `/settings`: Settings command to edit configuration values:
+### 4. Interactive Slash Configuration & Setup
+- `/setup`: Triggers a state-of-the-art interactive setup panel featuring custom Discord dropdown menus (select channels/roles) and action buttons (Save/Cancel). Allows live configuration of:
+  - **Logging Channel** (Filtered to text channels)
+  - **Jail Role** (Excludes `@everyone`)
+  - **Permit/Authorization Role** (Excludes `@everyone`)
+  - **Member Counter Channel** (Filtered to voice channels, optional)
+- `/settings`: Settings command to edit configuration values individually:
   - `/settings prefix [new_prefix]`
   - `/settings log_channel [channel]`
   - `/settings jail_role [role]`
   - `/settings auth_role [role]`
   - `/settings member_counter [channel]`
 
-### 5. Utilities & Movement
+### 5. Guild Migration & Database Purge Commands
+- `?shift`: Owner-only migration utility. Asks the owner to supply a server invite link, resolves it to verify server existence, provides bot authorize URLs, and wipes the *current* guild settings and channel mappings from SQLite (preserving level progress).
+- `?reset`: Owner-only purge utility. Prompts for absolute confirmation and wipes all SQLite tables completely (settings, levels, aliases, voice tracking, and jailed records).
+
+### 6. Utilities & Movement
 - **Voice Movements (`?mv`)**: Moves caller VC, user to channel, or all to channel using regex matches (`/\D/g`) to resolve IDs, mentions, or partial names.
 - **Lobby VC Tracker**: Fires text invite cards when VC user counts hit monitored milestones, with a 15-minute abuse rate limit.
 - **Discohook Loader**: Sends embeds from complex Discohook JSON payloads (`?embed send`).
