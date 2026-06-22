@@ -3,7 +3,8 @@ const dbSetup = require('../../database/dbSetup');
 
 module.exports = {
     name: 'jail',
-    description: 'Strip all roles from a user and assign the Jailed role.',
+    description: 'Strip all roles from a user, assign the Jailed role, and back up roles to SQLite.',
+    usage: '?jail @user',
     async execute(message, args, config, settings) {
         // Check authorization (ModerateMembers/ManageRoles or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
@@ -22,15 +23,19 @@ module.exports = {
             return message.reply('❌ Please specify a valid member to jail.').catch(() => {});
         }
 
-        const jailRoleId = settings.jail_role_id || config.JAILED_ROLE_ID;
-        if (!jailRoleId) {
-            return message.reply('❌ The **Jailed** role has not been configured yet. Use `/setup` to configure it.').catch(() => {});
+        let jailRole = null;
+        try {
+            const jailSystem = await dbSetup.ensureJailSystem(message.guild);
+            jailRole = jailSystem.jailRole;
+        } catch (err) {
+            console.error('[Jail Command Auto Setup Failed]:', err);
         }
 
-        const jailRole = message.guild.roles.cache.get(jailRoleId);
         if (!jailRole) {
-            return message.reply('❌ The configured **Jailed** role was not found in this server.').catch(() => {});
+            return message.reply('❌ The **Jailed** role and channels could not be resolved or created automatically.').catch(() => {});
         }
+
+        const jailRoleId = jailRole.id;
 
         // Prevent jailing administrators/bot itself/owners
         if (targetMember.user.id === message.guild.ownerId || targetMember.user.bot) {
@@ -39,27 +44,55 @@ module.exports = {
 
         // Check if user is already jailed
         const alreadyJailed = dbSetup.getJailedUser(targetMember.id);
-        if (alreadyJailed) {
+        if (alreadyJailed || targetMember.roles.cache.has(jailRoleId)) {
             return message.reply('❌ This member is already jailed!').catch(() => {});
         }
 
-        // Fetch original roles, filter out @everyone
+        // Fetch original roles to backup, excluding @everyone and managed integration roles
         const originalRoles = targetMember.roles.cache
-            .filter(r => r.id !== message.guild.id)
+            .filter(r => r.id !== message.guild.id && !r.managed)
             .map(r => r.id);
 
         try {
-            // Save roles to SQLite database
-            dbSetup.jailUser(targetMember.id, originalRoles);
+            const botMember = message.guild.members.me || await message.guild.members.fetch(message.client.user.id).catch(() => null);
+            if (!botMember) {
+                return message.reply('❌ Could not fetch bot member information.').catch(() => {});
+            }
 
-            // Re-assign roles: strip all and add Jailed role
-            await targetMember.roles.set([jailRoleId], `Jailed by ${message.author.tag}`);
+            // Check if bot can manage the jail role itself
+            if (botMember.roles.highest.position <= jailRole.position) {
+                return message.reply(`❌ Cannot jail: the **Jailed** role is higher than or equal to the bot's highest role.`).catch(() => {});
+            }
+
+            // 1. Assign Jailed role first
+            await targetMember.roles.add(jailRoleId, `Jailed by ${message.author.tag}`);
+
+            // Fetch target member again to verify role was added
+            const updatedMember = await message.guild.members.fetch(targetMember.id).catch(() => null);
+            if (!updatedMember || !updatedMember.roles.cache.has(jailRoleId)) {
+                return message.reply('❌ Failed to assign the Jailed role. Aborting database save and role stripping.').catch(() => {});
+            }
+
+            // 2. Strip manageable roles (excluding Jailed role itself)
+            const rolesToRemove = updatedMember.roles.cache.filter(role => 
+                role.id !== message.guild.id && 
+                role.id !== jailRoleId &&
+                !role.managed && 
+                role.position < botMember.roles.highest.position
+            );
+
+            if (rolesToRemove.size > 0) {
+                await updatedMember.roles.remove(rolesToRemove, `Stripped for Jail by ${message.author.tag}`);
+            }
+
+            // 3. Save roles to SQLite database (only after Jailed role exists on the user)
+            dbSetup.jailUser(targetMember.id, originalRoles);
 
             // Response embed
             const embed = new EmbedBuilder()
                 .setColor(0x333333)
                 .setTitle('🔒 Member Jailed')
-                .setDescription(`Successfully jailed <@${targetMember.id}>.`)
+                .setDescription(`Successfully jailed <@${targetMember.id}>. Manageable roles stripped.`)
                 .setTimestamp();
 
             await message.reply({ embeds: [embed] }).catch(() => {});

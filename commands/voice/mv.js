@@ -19,6 +19,7 @@ function resolveChannel(guild, input) {
 module.exports = {
     name: 'mv',
     description: 'Move members between voice channels.',
+    usage: '?mv, ?mv @user to <Channel>, or ?mv all to <Channel>',
     async execute(message, args, config, settings) {
         // Check authorization (MoveMembers permission or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;

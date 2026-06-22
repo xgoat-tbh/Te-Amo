@@ -1,4 +1,4 @@
-const { Events, EmbedBuilder } = require('discord.js');
+const { Events, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const dbSetup = require('../database/dbSetup');
 const { updateMilestoneRoles } = require('./ready');
 
@@ -93,6 +93,11 @@ module.exports = {
                 const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
                 if (botMember.roles.highest.position <= role.position) {
                     return message.reply(`❌ Cannot toggle role: **${role.name}** is higher than or equal to the bot's highest role.`).catch(() => {});
+                }
+
+                // Privilege Escalation Check: Deny if the role position is higher than or equal to the author's highest role, unless author is Admin
+                if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && message.member.roles.highest.position <= role.position) {
+                    return message.reply(`❌ Hierarchy Violation: You cannot toggle a role (**${role.name}**) that is higher than or equal to your own highest role.`).catch(() => {});
                 }
 
                 if (targetMember.roles.cache.has(targetRoleId)) {

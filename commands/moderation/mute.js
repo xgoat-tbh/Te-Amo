@@ -4,6 +4,7 @@ function parseDuration(durationStr) {
     const match = durationStr.match(/^(\d+)([mhd])$/i);
     if (!match) return null;
     const value = parseInt(match[1], 10);
+    if (value <= 0) return null;
     const unit = match[2].toLowerCase();
     switch (unit) {
         case 'm': return value * 60 * 1000;
@@ -16,6 +17,7 @@ function parseDuration(durationStr) {
 module.exports = {
     name: 'mute',
     description: 'Mute (Timeout) a member for a specified duration.',
+    usage: '?mute @user <duration> [reason]',
     async execute(message, args, config, settings) {
         // Check authorization (ModerateMembers permission or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;

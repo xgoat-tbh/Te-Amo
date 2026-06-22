@@ -4,6 +4,7 @@ const dbSetup = require('../../database/dbSetup');
 module.exports = {
     name: 'rank',
     description: 'Display your current level, XP, and rank progress.',
+    usage: '?rank [@user]',
     async execute(message, args, config, settings) {
         // Resolve target user
         let targetUser = message.author;

@@ -14,6 +14,21 @@ const MILESTONES = [
     { level: 1, name: 'Commoner' }
 ];
 
+async function updateMemberCounter(guild) {
+    try {
+        const settings = dbSetup.getGuildSettings(guild.id);
+        const counterChannelId = settings.member_counter_channel_id;
+        if (counterChannelId) {
+            const channel = guild.channels.cache.get(counterChannelId);
+            if (channel) {
+                await channel.setName(`📊 Members: ${guild.memberCount}`).catch(console.error);
+            }
+        }
+    } catch (err) {
+        console.error(`[Member Counter Error] Guild ${guild.name}:`, err);
+    }
+}
+
 async function updateMilestoneRoles(member, level) {
     try {
         const guild = member.guild;
@@ -55,9 +70,15 @@ module.exports = {
     name: Events.ClientReady,
     once: true,
     updateMilestoneRoles,
+    updateMemberCounter,
     async execute(client, config) {
         console.log(`Ready! Logged in as ${client.user.tag}`);
         client.user.setActivity('amo.gg', { type: ActivityType.Playing });
+
+        // Initial member counter update on boot
+        for (const [guildId, guild] of client.guilds.cache) {
+            await updateMemberCounter(guild);
+        }
 
         // Register slash commands globally
         try {
@@ -77,13 +98,65 @@ module.exports = {
                                 required: true
                             }
                         ]
+                    },
+                    {
+                        name: 'log_channel',
+                        description: 'Update the logging channel',
+                        type: 1, // SUB_COMMAND
+                        options: [
+                            {
+                                name: 'channel',
+                                description: 'The new logging channel',
+                                type: 7, // CHANNEL
+                                required: true
+                            }
+                        ]
+                    },
+                    {
+                        name: 'jail_role',
+                        description: 'Update the jail role',
+                        type: 1, // SUB_COMMAND
+                        options: [
+                            {
+                                name: 'role',
+                                description: 'The new jail role',
+                                type: 8, // ROLE
+                                required: true
+                            }
+                        ]
+                    },
+                    {
+                        name: 'auth_role',
+                        description: 'Update the permit authorization role',
+                        type: 1, // SUB_COMMAND
+                        options: [
+                            {
+                                name: 'role',
+                                description: 'The new permit role',
+                                type: 8, // ROLE
+                                required: true
+                            }
+                        ]
+                    },
+                    {
+                        name: 'member_counter',
+                        description: 'Update the member counter channel',
+                        type: 1, // SUB_COMMAND
+                        options: [
+                            {
+                                name: 'channel',
+                                description: 'The new member counter channel',
+                                type: 7, // CHANNEL
+                                required: true
+                            }
+                        ]
                     }
                 ]
             };
 
             const setupCommand = {
                 name: 'setup',
-                description: 'Assign server log, jail, and permit roles',
+                description: 'Assign server settings, logging, jail, and member counter options',
                 options: [
                     {
                         name: 'log_channel',
@@ -102,6 +175,12 @@ module.exports = {
                         description: 'Permit role authorized for mod actions/aliases',
                         type: 8, // ROLE
                         required: true
+                    },
+                    {
+                        name: 'member_counter',
+                        description: 'Channel to display the server member count',
+                        type: 7, // CHANNEL
+                        required: false
                     }
                 ]
             };
@@ -118,11 +197,9 @@ module.exports = {
                 for (const [guildId, guild] of client.guilds.cache) {
                     const voiceChannels = guild.channels.cache.filter(c => c.isVoiceBased());
                     for (const [vcId, vc] of voiceChannels) {
-                        // Check active users in voice channels
                         const members = vc.members.filter(m => !m.user.bot);
                         for (const [memberId, member] of members) {
                             const vs = member.voice;
-                            // Disqualified if self-muted, self-deafened, server-muted, or server-deafened
                             if (vs.selfMute || vs.selfDeaf || vs.serverMute || vs.serverDeaf) {
                                 continue;
                             }
@@ -134,15 +211,12 @@ module.exports = {
                             const xpGained = 10;
                             const newXp = currentXp + xpGained;
 
-                            // Calculate next level threshold: XP = 100 * level^2.5
-                            // If level is 0, let's treat threshold as 100 XP
                             let nextXpNeeded = Math.floor(100 * Math.pow(currentLevel, 2.5));
                             if (currentLevel === 0) nextXpNeeded = 100;
 
                             let xpToSave = newXp;
                             let levelToSave = currentLevel;
 
-                            // Loop check iteratively to handle multiple promotions
                             while (xpToSave >= nextXpNeeded) {
                                 xpToSave -= nextXpNeeded;
                                 levelToSave++;
@@ -157,9 +231,7 @@ module.exports = {
                                     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
                                     .setTimestamp();
 
-                                // DM or log
                                 await member.send({ embeds: [embed] }).catch(() => {
-                                    // Fallback to log or system channel if DM blocked
                                     const settings = dbSetup.getGuildSettings(guild.id);
                                     if (settings.log_channel_id) {
                                         const chan = guild.channels.cache.get(settings.log_channel_id);
@@ -180,7 +252,7 @@ module.exports = {
             } catch (err) {
                 console.error('[Voice XP Loop Error]:', err);
             }
-        }, 300000); // 5 minutes in milliseconds
+        }, 300000);
         console.log('[Leveling] voice XP checks configured to run every 5 minutes.');
     }
 };

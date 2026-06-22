@@ -4,6 +4,7 @@ const dbSetup = require('../../database/dbSetup');
 module.exports = {
     name: 'unjail',
     description: 'Restore a jailed member\'s original roles and remove the Jailed role.',
+    usage: '?unjail @user',
     async execute(message, args, config, settings) {
         // Check authorization (ModerateMembers/ManageRoles or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
@@ -45,14 +46,31 @@ module.exports = {
             console.error('[Unjail JSON Parse Error]:', parseErr);
         }
 
-        // Filter out roles that were deleted from the guild to prevent Discord API errors
-        const validRoles = oldRolesArray.filter(roleId => message.guild.roles.cache.has(roleId));
+        const botMember = message.guild.members.me || await message.guild.members.fetch(message.client.user.id).catch(() => null);
+        if (!botMember) {
+            return message.reply('❌ Could not fetch bot member information.').catch(() => {});
+        }
+
+        const jailRoleId = settings.jail_role_id || config.JAILED_ROLE_ID;
+
+        // Filter out roles that were deleted from the guild, managed integration roles, or roles higher than the bot
+        const rolesToAdd = oldRolesArray.filter(roleId => {
+            const role = message.guild.roles.cache.get(roleId);
+            return role && !role.managed && role.position < botMember.roles.highest.position;
+        });
 
         try {
-            // Restore roles and strip Jailed role (Jailed role is not in validRoles array)
-            await targetMember.roles.set(validRoles, `Unjailed by ${message.author.tag}`);
+            // 1. Remove Jailed role first
+            if (jailRoleId && targetMember.roles.cache.has(jailRoleId)) {
+                await targetMember.roles.remove(jailRoleId, `Unjailed by ${message.author.tag}`);
+            }
 
-            // Delete database record
+            // 2. Restore manageable roles
+            if (rolesToAdd.length > 0) {
+                await targetMember.roles.add(rolesToAdd, `Unjailed by ${message.author.tag}`);
+            }
+
+            // 3. Delete database record
             dbSetup.unjailUser(targetMember.id);
 
             // Response embed
@@ -75,7 +93,7 @@ module.exports = {
                         .addFields(
                             { name: 'Target User', value: `<@${targetMember.id}> (\`${targetMember.id}\`)` },
                             { name: 'Moderator', value: `<@${message.author.id}>` },
-                            { name: 'Restored Roles', value: validRoles.map(id => `<@&${id}>`).join(', ') || 'None' }
+                            { name: 'Restored Roles', value: rolesToAdd.map(id => `<@&${id}>`).join(', ') || 'None' }
                         )
                         .setTimestamp();
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});

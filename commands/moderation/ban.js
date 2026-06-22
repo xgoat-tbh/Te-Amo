@@ -3,6 +3,7 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 module.exports = {
     name: 'ban',
     description: 'Ban a member from the server.',
+    usage: '?ban @user [reason]',
     async execute(message, args, config, settings) {
         // Check authorization (BanMembers permission or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;

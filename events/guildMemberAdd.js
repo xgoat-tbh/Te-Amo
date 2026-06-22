@@ -1,10 +1,14 @@
 const { Events } = require('discord.js');
 const dbSetup = require('../database/dbSetup');
+const { updateMemberCounter } = require('./ready');
 
 module.exports = {
     name: Events.GuildMemberAdd,
     async execute(member, client, config) {
-        // Anti-Jail Escape Check
+        // 1. Update member counter channel
+        await updateMemberCounter(member.guild);
+
+        // 2. Anti-Jail Escape Check
         const jailedRecord = dbSetup.getJailedUser(member.id);
         if (jailedRecord) {
             const settings = dbSetup.getGuildSettings(member.guild.id);

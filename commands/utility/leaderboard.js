@@ -5,6 +5,7 @@ module.exports = {
     name: 'leaderboard',
     aliases: ['lb'],
     description: 'Display the top 10 ranked users in the server.',
+    usage: '?leaderboard',
     async execute(message, args, config, settings) {
         const topUsers = dbSetup.getTopUsers(10);
         if (topUsers.length === 0) {

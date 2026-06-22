@@ -2,10 +2,47 @@ const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
     name: 'help',
-    description: 'Display all available commands categorized by subfolder.',
+    description: 'Display all available commands or detailed information about a specific command.',
+    usage: '?help [command_name]',
     async execute(message, args, config, settings) {
         const prefix = settings.prefix || '?';
         const commands = message.client.commands;
+
+        // CASE 1: Detailed help lookup
+        if (args.length > 0) {
+            const searchName = args[0].toLowerCase();
+            const command = commands.get(searchName) || 
+                            commands.find(cmd => cmd.aliases && cmd.aliases.includes(searchName));
+
+            if (!command) {
+                return message.reply(`❌ Command \`${searchName}\` was not found.`).catch(() => {});
+            }
+
+            const cleanUsage = command.usage ? command.usage.replace(/^\?/, prefix) : `${prefix}${command.name}`;
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00AEFF)
+                .setTitle(`ℹ️ Command Info: \`${prefix}${command.name}\``)
+                .addFields(
+                    { name: '📋 Description', value: command.description || '*No description provided.*' },
+                    { name: '📁 Category', value: command.category ? command.category.toUpperCase() : 'GENERAL', inline: true },
+                    { name: '⚙️ Usage', value: `\`${cleanUsage}\``, inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Te-Amo Assistant', iconURL: message.guild.iconURL() });
+
+            if (command.aliases && command.aliases.length > 0) {
+                embed.addFields({
+                    name: '🔗 Aliases',
+                    value: command.aliases.map(alias => `\`${prefix}${alias}\``).join(', '),
+                    inline: true
+                });
+            }
+
+            return message.reply({ embeds: [embed] }).catch(() => {});
+        }
+
+        // CASE 2: General help command list
         const categories = {};
 
         // Group commands by their category subfolder
@@ -20,7 +57,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor(0x00AEFF)
             .setTitle('📖 Te-Amo Command Guide')
-            .setDescription(`Dynamic system commands guide. The active command prefix is: \`${prefix}\``)
+            .setDescription(`Dynamic system commands guide. Use \`${prefix}help <command>\` for detailed usage.\nActive command prefix is: \`${prefix}\``)
             .setTimestamp()
             .setFooter({ text: 'Te-Amo Assistant', iconURL: message.guild.iconURL() });
 
@@ -41,8 +78,8 @@ module.exports = {
         // Add slash commands summary to help
         embed.addFields({
             name: '⚙️ SLASH CONFIGURATION COMMANDS',
-            value: '• `/settings prefix [new_prefix]` - Update server command prefix\n' +
-                   '• `/setup` - Configure logging room, jail role, and authorization roles',
+            value: '• `/settings` - Edit dynamic configurations (prefix, log channel, jail role, permit role)\n' +
+                   '• `/setup` - Configure logging, jail, and permit settings & displays server capabilities',
             inline: false
         });
 

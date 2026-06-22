@@ -7,41 +7,40 @@ const alertCooldowns = new Map();
 module.exports = {
     name: Events.VoiceStateUpdate,
     async execute(oldState, newState, client, config) {
-        // We only care if the member joined or switched to a voice channel
         const newChannelId = newState.channelId;
         if (!newChannelId) return;
 
         // Skip if same channel (e.g. mute/unmute action)
         if (oldState.channelId === newChannelId) return;
 
-        // Retrieve monitored channels configuration
-        const monitoredChannels = config.monitored_channels || {};
-        const trigger = monitoredChannels[newChannelId];
+        // Retrieve monitored VC trigger from SQLite database dynamically
+        const trigger = dbSetup.getMonitoredVc(newChannelId);
         if (!trigger) return;
 
         const vc = newState.channel;
         if (!vc) return;
 
-        // Count human members
+        // Anti-Exploit: Ignore bots when evaluating lobby size
         const humanCount = vc.members.filter(m => !m.user.bot).size;
 
         // If count hits the milestone trigger exactly
         if (humanCount === trigger.milestone) {
             const now = Date.now();
-            const cooldownTime = 15 * 60 * 1000; // 15 minutes
+            const cooldownTime = 15 * 60 * 1000; // 15 minutes anti-abuse lockout
 
+            // Anti-Abuse Lockout Cooldown check
             if (alertCooldowns.has(newChannelId)) {
                 const lastAlert = alertCooldowns.get(newChannelId);
                 if (now - lastAlert < cooldownTime) {
-                    // Still in cooldown period
+                    // Trolls attempting to hop in/out are locked out
                     return;
                 }
             }
 
-            // Set cooldown lock
+            // Set lockout timestamp
             alertCooldowns.set(newChannelId, now);
 
-            // Fetch target ping channel ID (GAMING_PINGS_CHANNEL_ID or setup log channel)
+            // Fetch target pings channel ID from settings or global config
             const guildId = newState.guild.id;
             const settings = dbSetup.getGuildSettings(guildId);
             const pingChannelId = config.GAMING_PINGS_CHANNEL_ID || settings.log_channel_id;

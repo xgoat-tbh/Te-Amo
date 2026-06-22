@@ -3,6 +3,7 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 module.exports = {
     name: 'kick',
     description: 'Kick a member from the server.',
+    usage: '?kick @user [reason]',
     async execute(message, args, config, settings) {
         // Check authorization (KickMembers permission or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;

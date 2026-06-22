@@ -3,6 +3,7 @@ const { PermissionFlagsBits } = require('discord.js');
 module.exports = {
     name: 'embed',
     description: 'Send custom Discohook embeds using raw JSON payloads.',
+    usage: '?embed send <#channel> <json_payload>',
     async execute(message, args, config, settings) {
         // Check authorization (ManageMessages/ManageGuild or Setup permit role)
         const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
@@ -18,6 +19,10 @@ module.exports = {
 
         if (!channelMention || !jsonString) {
             return message.reply(`❌ Invalid format. Use: \`${settings.prefix || '?'}embed send <#channel> <json_payload>\``).catch(() => {});
+        }
+
+        if (jsonString.length > 4000) {
+            return message.reply('❌ JSON payload exceeds the safety limit of 4000 characters.').catch(() => {});
         }
 
         const channelId = channelMention.replace(/\D/g, '');
