@@ -73,11 +73,12 @@ Uses `better-sqlite3` for local, lightweight database operations. Contains these
   - **Rejoin Protection**: Triggers on `guildMemberAdd` to re-apply the jail status if a user leaves and rejoins.
 
 ### 4. Interactive Slash Configuration & Setup
-- `/setup`: Triggers a state-of-the-art interactive setup panel featuring custom Discord dropdown menus (select channels/roles) and action buttons (Save/Cancel). Allows live configuration of:
+- `/setup system`: Triggers a state-of-the-art interactive setup panel featuring custom Discord dropdown menus (select channels/roles) and action buttons (Save/Cancel). Allows live configuration of:
   - **Logging Channel** (Filtered to text channels)
   - **Jail Role** (Excludes `@everyone`)
   - **Permit/Authorization Role** (Excludes `@everyone`)
   - **Member Counter Channel** (Filtered to voice channels, optional)
+- `/setup leveling`: Set the 10 role options for the leveling milestone tiers (Level 1, 5, 10, 15, 20, 30, 40, 50, 75, 100) dynamically stored in the SQLite database.
 - `/settings`: Settings command to edit configuration values individually:
   - `/settings prefix [new_prefix]`
   - `/settings log_channel [channel]`

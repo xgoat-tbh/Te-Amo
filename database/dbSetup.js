@@ -44,6 +44,20 @@ db.exec(`
     message TEXT,
     guild_id TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS guild_level_roles (
+    guild_id TEXT PRIMARY KEY,
+    role_level_1 TEXT,
+    role_level_5 TEXT,
+    role_level_10 TEXT,
+    role_level_15 TEXT,
+    role_level_20 TEXT,
+    role_level_30 TEXT,
+    role_level_40 TEXT,
+    role_level_50 TEXT,
+    role_level_75 TEXT,
+    role_level_100 TEXT
+  );
 `);
 
 // --- MIGRATION CHECK FOR ALIAS DESCRIPTION & COUNTER COLUMN ---
@@ -271,6 +285,33 @@ async function ensureJailSystem(guild) {
     return { jailRole, category, prisonText, prisonVoice };
 }
 
+function getLevelRoles(guildId) {
+    const stmt = db.prepare('SELECT * FROM guild_level_roles WHERE guild_id = ?');
+    return stmt.get(guildId) || null;
+}
+
+function updateLevelRoles(guildId, roleMap) {
+    const stmt = db.prepare(`
+        INSERT OR REPLACE INTO guild_level_roles (
+            guild_id, role_level_1, role_level_5, role_level_10, role_level_15, role_level_20,
+            role_level_30, role_level_40, role_level_50, role_level_75, role_level_100
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+        guildId,
+        roleMap.level_1,
+        roleMap.level_5,
+        roleMap.level_10,
+        roleMap.level_15,
+        roleMap.level_20,
+        roleMap.level_30,
+        roleMap.level_40,
+        roleMap.level_50,
+        roleMap.level_75,
+        roleMap.level_100
+    );
+}
+
 module.exports = {
     db,
     getGuildSettings,
@@ -291,5 +332,7 @@ module.exports = {
     getMonitoredVc,
     addMonitoredVc,
     removeMonitoredVc,
-    ensureJailSystem
+    ensureJailSystem,
+    getLevelRoles,
+    updateLevelRoles
 };

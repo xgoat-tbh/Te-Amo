@@ -1,6 +1,6 @@
 const { Events, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const dbSetup = require('../database/dbSetup');
-const { updateMilestoneRoles } = require('./ready');
+const levelManager = require('../utils/levelManager');
 
 module.exports = {
     name: Events.MessageCreate,
@@ -53,7 +53,8 @@ module.exports = {
             dbSetup.updateUserLevel(userId, xpToSave, levelToSave, now);
 
             if (leveledUp) {
-                await updateMilestoneRoles(message.member, levelToSave);
+                const totalXp = Math.floor(100 * Math.pow(levelToSave, 2.5)) + xpToSave;
+                await levelManager.checkAndApplyLevelRoles(message.member, totalXp);
             }
         }
 

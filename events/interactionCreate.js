@@ -323,29 +323,92 @@ module.exports = {
         }
 
         if (commandName === 'setup') {
-            // Check if there is already an active session
-            if (activeSetups.has(guildId)) {
+            const subcommand = interaction.options.getSubcommand();
+
+            if (subcommand === 'system') {
+                // Check if there is already an active session
+                if (activeSetups.has(guildId)) {
+                    return interaction.reply({
+                        content: '⚠️ A setup session is already in progress. Please use the existing dashboard message to configure the bot.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+
+                const session = {
+                    logChannelId: null,
+                    jailRoleId: null,
+                    authRoleId: null,
+                    memberCounterId: null,
+                    interactionUserId: interaction.user.id
+                };
+                activeSetups.set(guildId, session);
+
+                const dashboard = getSetupDashboard(interaction.guild, session);
+
                 return interaction.reply({
-                    content: '⚠️ A setup session is already in progress. Please use the existing dashboard message to configure the bot.',
+                    ...dashboard,
                     flags: [MessageFlags.Ephemeral]
                 });
             }
 
-            const session = {
-                logChannelId: null,
-                jailRoleId: null,
-                authRoleId: null,
-                memberCounterId: null,
-                interactionUserId: interaction.user.id
-            };
-            activeSetups.set(guildId, session);
+            if (subcommand === 'leveling') {
+                const roleMap = {
+                    level_1: interaction.options.getRole('level_1').id,
+                    level_5: interaction.options.getRole('level_5').id,
+                    level_10: interaction.options.getRole('level_10').id,
+                    level_15: interaction.options.getRole('level_15').id,
+                    level_20: interaction.options.getRole('level_20').id,
+                    level_30: interaction.options.getRole('level_30').id,
+                    level_40: interaction.options.getRole('level_40').id,
+                    level_50: interaction.options.getRole('level_50').id,
+                    level_75: interaction.options.getRole('level_75').id,
+                    level_100: interaction.options.getRole('level_100').id
+                };
 
-            const dashboard = getSetupDashboard(interaction.guild, session);
+                // Validate none of them is @everyone
+                for (const [key, value] of Object.entries(roleMap)) {
+                    if (value === guildId) {
+                        return interaction.reply({
+                            content: `❌ You cannot configure the \`@everyone\` role for milestone: **${key.replace('_', ' ')}**.`,
+                            flags: [MessageFlags.Ephemeral]
+                        });
+                    }
+                }
 
-            return interaction.reply({
-                ...dashboard,
-                flags: [MessageFlags.Ephemeral]
-            });
+                try {
+                    dbSetup.updateLevelRoles(guildId, roleMap);
+                    
+                    const successEmbed = new EmbedBuilder()
+                        .setColor(0x00FF88)
+                        .setTitle('🏆 Leveling Milestone Roles Configured')
+                        .setDescription('The leveling milestone roles have been successfully updated and saved in the SQLite database.')
+                        .addFields(
+                            { name: 'Level 1 (Commoner)', value: `<@&${roleMap.level_1}>`, inline: true },
+                            { name: 'Level 5 (Elite)', value: `<@&${roleMap.level_5}>`, inline: true },
+                            { name: 'Level 10 (Professional)', value: `<@&${roleMap.level_10}>`, inline: true },
+                            { name: 'Level 15 (Master)', value: `<@&${roleMap.level_15}>`, inline: true },
+                            { name: 'Level 20 (Veteran)', value: `<@&${roleMap.level_20}>`, inline: true },
+                            { name: 'Level 30 (Legend)', value: `<@&${roleMap.level_30}>`, inline: true },
+                            { name: 'Level 40 (Mythic)', value: `<@&${roleMap.level_40}>`, inline: true },
+                            { name: 'Level 50 (Zenith)', value: `<@&${roleMap.level_50}>`, inline: true },
+                            { name: 'Level 75 (Ascendant)', value: `<@&${roleMap.level_75}>`, inline: true },
+                            { name: 'Level 100 (Grandmaster)', value: `<@&${roleMap.level_100}>`, inline: true }
+                        )
+                        .setTimestamp()
+                        .setFooter({ text: 'Te-Amo Leveling Setup', iconURL: interaction.guild.iconURL() });
+
+                    return interaction.reply({
+                        embeds: [successEmbed],
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                } catch (err) {
+                    console.error('[Leveling Setup SQLite Error]:', err);
+                    return interaction.reply({
+                        content: '❌ Failed to save leveling roles to the database.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+            }
         }
     }
 };

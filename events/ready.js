@@ -1,18 +1,6 @@
 const { Events, ActivityType, EmbedBuilder } = require('discord.js');
 const dbSetup = require('../database/dbSetup');
-
-const MILESTONES = [
-    { level: 100, name: 'Grandmaster' },
-    { level: 75, name: 'Ascendant' },
-    { level: 50, name: 'Zenith' },
-    { level: 40, name: 'Mythic' },
-    { level: 30, name: 'Legend' },
-    { level: 20, name: 'Veteran' },
-    { level: 15, name: 'Master' },
-    { level: 10, name: 'Professional' },
-    { level: 5, name: 'Elite' },
-    { level: 1, name: 'Commoner' }
-];
+const levelManager = require('../utils/levelManager');
 
 async function updateMemberCounter(guild) {
     try {
@@ -29,47 +17,9 @@ async function updateMemberCounter(guild) {
     }
 }
 
-async function updateMilestoneRoles(member, level) {
-    try {
-        const guild = member.guild;
-        const botMember = guild.members.me || await guild.members.fetch(member.client.user.id).catch(() => null);
-        if (!botMember || !botMember.permissions.has('ManageRoles')) return;
-
-        const targetMilestone = MILESTONES.find(m => level >= m.level);
-        const milestoneRoles = [];
-        for (const milestone of MILESTONES) {
-            const role = guild.roles.cache.find(r => r.name.toLowerCase() === milestone.name.toLowerCase());
-            if (role) {
-                milestoneRoles.push({ milestone, role });
-            }
-        }
-
-        if (milestoneRoles.length === 0) return;
-
-        const targetRoleData = targetMilestone 
-            ? milestoneRoles.find(mr => mr.milestone.name === targetMilestone.name)
-            : null;
-
-        for (const { role } of milestoneRoles) {
-            if (targetRoleData && role.id === targetRoleData.role.id) {
-                if (!member.roles.cache.has(role.id) && botMember.roles.highest.position > role.position) {
-                    await member.roles.add(role, `Level ${level} Milestone`).catch(console.error);
-                }
-            } else {
-                if (member.roles.cache.has(role.id) && botMember.roles.highest.position > role.position) {
-                    await member.roles.remove(role, `Strip old milestone`).catch(console.error);
-                }
-            }
-        }
-    } catch (err) {
-        console.error(`[Milestone Swapping Error] User ${member.user.tag}:`, err);
-    }
-}
-
 module.exports = {
     name: Events.ClientReady,
     once: true,
-    updateMilestoneRoles,
     updateMemberCounter,
     async execute(client, config) {
         console.log(`Ready! Logged in as ${client.user.tag}`);
@@ -156,7 +106,31 @@ module.exports = {
 
             const setupCommand = {
                 name: 'setup',
-                description: 'Interactive dashboard to configure logging, jail, and permit roles/channels'
+                description: 'Configure bot systems and leveling milestones',
+                options: [
+                    {
+                        name: 'system',
+                        description: 'Interactive dashboard to configure logging, jail, permit, and member counter',
+                        type: 1 // SUB_COMMAND
+                    },
+                    {
+                        name: 'leveling',
+                        description: 'Configure role mapping for leveling milestones',
+                        type: 1, // SUB_COMMAND
+                        options: [
+                            { name: 'level_1', description: 'Role for Level 1 (Commoner)', type: 8, required: true },
+                            { name: 'level_5', description: 'Role for Level 5 (Elite)', type: 8, required: true },
+                            { name: 'level_10', description: 'Role for Level 10 (Professional)', type: 8, required: true },
+                            { name: 'level_15', description: 'Role for Level 15 (Master)', type: 8, required: true },
+                            { name: 'level_20', description: 'Role for Level 20 (Veteran)', type: 8, required: true },
+                            { name: 'level_30', description: 'Role for Level 30 (Legend)', type: 8, required: true },
+                            { name: 'level_40', description: 'Role for Level 40 (Mythic)', type: 8, required: true },
+                            { name: 'level_50', description: 'Role for Level 50 (Zenith)', type: 8, required: true },
+                            { name: 'level_75', description: 'Role for Level 75 (Ascendant)', type: 8, required: true },
+                            { name: 'level_100', description: 'Role for Level 100 (Grandmaster)', type: 8, required: true }
+                        ]
+                    }
+                ]
             };
 
             await client.application.commands.set([settingsCommand, setupCommand]);
@@ -218,7 +192,8 @@ module.exports = {
 
                             dbSetup.updateUserLevel(member.user.id, xpToSave, levelToSave, userData.last_text_xp);
                             if (levelToSave > currentLevel) {
-                                await updateMilestoneRoles(member, levelToSave);
+                                const totalXp = Math.floor(100 * Math.pow(levelToSave, 2.5)) + xpToSave;
+                                await levelManager.checkAndApplyLevelRoles(member, totalXp);
                             }
                         }
                     }

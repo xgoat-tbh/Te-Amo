@@ -78,7 +78,8 @@ module.exports = {
         embed.addFields({
             name: '⚙️ SLASH CONFIGURATION COMMANDS',
             value: '• `/settings` - Edit dynamic configurations (prefix, log channel, jail role, permit role, member counter)\n' +
-                   '• `/setup` - Interactive setup panel utilizing dropdown select menus and buttons to configure server systems',
+                   '• `/setup system` - Interactive setup panel utilizing dropdown select menus and buttons to configure server systems\n' +
+                   '• `/setup leveling` - Map Discord roles to the 10 leveling milestones dynamically stored in SQLite',
             inline: false
         });
 
