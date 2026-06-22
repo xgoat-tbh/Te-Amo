@@ -36,7 +36,7 @@ module.exports = {
         const response = responses[Math.floor(Math.random() * responses.length)];
 
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
+            .setColor(0xFEE75C)
             .setTitle('🔮 Magic 8-Ball')
             .addFields(
                 { name: '❓ Question', value: question },

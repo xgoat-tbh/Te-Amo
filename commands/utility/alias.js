@@ -106,7 +106,7 @@ module.exports = {
             }
 
             const embed = new EmbedBuilder()
-                .setColor(0x2b2d31)
+                .setColor(0xFEE75C)
                 .setTitle('🎭 Configured Role Aliases')
                 .setTimestamp()
                 .setFooter({ text: 'Amo India Assistant', iconURL: message.guild.iconURL() });

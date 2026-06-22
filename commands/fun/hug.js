@@ -12,15 +12,29 @@ module.exports = {
             return message.reply('❌ Please specify a member to hug.').catch(() => {});
         }
 
-        const gifs = [
-            'https://media.giphy.com/media/u9BzJtV10GUeI/giphy.gif',
-            'https://media.giphy.com/media/lrr9rHuoJOE0w/giphy.gif',
-            'https://media.giphy.com/media/4c0oKhDxBK1SU/giphy.gif'
-        ];
-        const gif = gifs[Math.floor(Math.random() * gifs.length)];
+        let gif = '';
+        try {
+            const response = await fetch('https://nekos.best/api/v2/hug', {
+                headers: { 'User-Agent': 'AmoIndiaBot (dev@amo.india)' }
+            });
+            const data = await response.json();
+            gif = data.results[0].url;
+        } catch (err) {
+            console.error('[Hug API Error]:', err);
+            const gifs = [
+                'https://i.giphy.com/u9BzJtV10GUeI.gif',
+                'https://i.giphy.com/lrr9rHuoJOE0w.gif',
+                'https://i.giphy.com/4c0oKhDxBK1SU.gif',
+                'https://i.giphy.com/od553F16IO8vK.gif',
+                'https://i.giphy.com/rSDFStL6SxsAg.gif',
+                'https://i.giphy.com/17mNCcKU1mJlEro7SM.gif',
+                'https://i.giphy.com/Vz58J8shFW6BvqnIME.gif'
+            ];
+            gif = gifs[Math.floor(Math.random() * gifs.length)];
+        }
 
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
+            .setColor(0xFEE75C)
             .setTitle('🫂 Warm Hug!')
             .setDescription(`❤️ **<@${message.author.id}>** hugged **<@${targetMember.id}>**!`)
             .setImage(gif)

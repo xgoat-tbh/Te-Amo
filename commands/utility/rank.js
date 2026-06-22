@@ -49,7 +49,7 @@ module.exports = {
         const progressBar = '🟩'.repeat(filled) + '⬜'.repeat(empty);
 
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
+            .setColor(0xFEE75C)
             .setTitle(`📈 Rank Card - ${targetUser.username}`)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
             .addFields(

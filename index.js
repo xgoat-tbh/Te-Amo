@@ -11,13 +11,16 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.DirectMessages,         // Required for confession DM collection
+        GatewayIntentBits.DirectMessageReactions  // Required for DM button interactions
     ],
     partials: [
         Partials.User,
         Partials.GuildMember,
         Partials.Channel,
-        Partials.Message
+        Partials.Message,
+        Partials.DirectMessage  // Required to cache DM channels for awaitMessages
     ]
 });
 

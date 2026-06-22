@@ -11,7 +11,7 @@ module.exports = {
         }
 
         const initialEmbed = new EmbedBuilder()
-            .setColor(0x2b2d31)
+            .setColor(0xFEE75C)
             .setTitle('✈️ Amo India | Bot Migration Wizard')
             .setDescription('Please provide the **Discord Invite Link** of the new server you wish to shift the bot to (within 60 seconds).\n\n' +
                              '*Example: `https://discord.gg/invitecode` or just `invitecode`*')

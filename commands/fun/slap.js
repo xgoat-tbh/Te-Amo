@@ -12,15 +12,29 @@ module.exports = {
             return message.reply('❌ Please specify a member to slap.').catch(() => {});
         }
 
-        const gifs = [
-            'https://media.giphy.com/media/Zau0yrl17uzdK/giphy.gif',
-            'https://media.giphy.com/media/lX03h4CTk21V856E1K/giphy.gif',
-            'https://media.giphy.com/media/jLeyZM22pd98k/giphy.gif'
-        ];
-        const gif = gifs[Math.floor(Math.random() * gifs.length)];
+        let gif = '';
+        try {
+            const response = await fetch('https://nekos.best/api/v2/slap', {
+                headers: { 'User-Agent': 'AmoIndiaBot (dev@amo.india)' }
+            });
+            const data = await response.json();
+            gif = data.results[0].url;
+        } catch (err) {
+            console.error('[Slap API Error]:', err);
+            const gifs = [
+                'https://i.giphy.com/Zau0yrl17uzdK.gif',
+                'https://i.giphy.com/lX03h4CTk21V856E1K.gif',
+                'https://i.giphy.com/jLeyZM22pd98k.gif',
+                'https://i.giphy.com/LiRoVOHjMaQxO.gif',
+                'https://i.giphy.com/rCftUAVPLExZC.gif',
+                'https://i.giphy.com/Pe5653155694M.gif',
+                'https://i.giphy.com/109044238.gif'
+            ];
+            gif = gifs[Math.floor(Math.random() * gifs.length)];
+        }
 
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
+            .setColor(0xFEE75C)
             .setTitle('💢 Slapped!')
             .setDescription(`⚡ **<@${message.author.id}>** slapped **<@${targetMember.id}>**! Ouch!`)
             .setImage(gif)

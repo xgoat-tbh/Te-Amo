@@ -8,7 +8,7 @@ module.exports = {
         const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
 
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
+            .setColor(0xFEE75C)
             .setTitle('🪙 Coin Flip')
             .setDescription(`The coin landed on **${result}**!`)
             .setTimestamp()

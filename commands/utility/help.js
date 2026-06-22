@@ -35,7 +35,7 @@ module.exports = {
             const cleanUsage = command.usage ? command.usage.replace(/^\?/, prefix) : `${prefix}${command.name}`;
 
             const embed = new EmbedBuilder()
-                .setColor(0x2b2d31) // Discord native dark theme background color
+                .setColor(0xFEE75C) // Vibrant yellow
                 .setTitle(`ℹ️ Command Info: \`${prefix}${command.name}\``)
                 .addFields(
                     { name: '📋 Description', value: command.description || '*No description provided.*' },
@@ -76,7 +76,7 @@ module.exports = {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0x2b2d31) // Discord native dark theme background color
+            .setColor(0xFEE75C) // Vibrant yellow
             .setTitle('📖 Amo India Command Guide')
             .setDescription(`Dynamic system commands guide. Use \`${prefix}help <command>\` for detailed usage.\nActive command prefix is: \`${prefix}\``)
             .setTimestamp()

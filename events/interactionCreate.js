@@ -8,7 +8,10 @@ const {
     RoleSelectMenuBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ChannelType
+    ChannelType,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
 const dbSetup = require('../database/dbSetup');
 const { updateMemberCounter } = require('./ready');
@@ -17,7 +20,7 @@ const activeSetups = new Map();
 
 function getCoreSetupDashboard(guild, session) {
     const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
+        .setColor(0xFEE75C)
         .setTitle('⚙️ Amo India Core Setup Wizard')
         .setDescription('Configure your server logging, jail, and permit roles using the dropdown menus below.\n\n' +
                          'All selections are ephemeral and will only be saved when you click **Save Configuration**.')
@@ -76,7 +79,7 @@ function getCoreSetupDashboard(guild, session) {
 
 function getChannelsSetupDashboard(guild, session) {
     const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
+        .setColor(0xFEE75C)
         .setTitle('⚙️ Amo India Features Setup Wizard')
         .setDescription('Configure your server member counter, confession, and suggestion channels using the dropdown menus below.\n\n' +
                          'All selections are ephemeral and will only be saved when you click **Save Configuration**.')
@@ -139,6 +142,102 @@ module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction, client, config) {
         const guildId = interaction.guildId;
+
+        // ── CONFESSION: Button → Modal ──────────────────────────────────────
+        if (interaction.isButton() && (interaction.customId.startsWith('confession_anon_') || interaction.customId.startsWith('confession_known_'))) {
+            const parts = interaction.customId.split('_');
+            // customId format: confession_{mode}_{userId}_{guildId}
+            const mode = parts[1]; // 'anon' or 'known'
+            const targetUserId = parts[2];
+            const sourceGuildId = parts[3];
+
+            // Only the person who triggered ?confession can click
+            if (interaction.user.id !== targetUserId) {
+                return interaction.reply({
+                    content: '❌ This confession prompt is not yours to use.',
+                    flags: [MessageFlags.Ephemeral]
+                });
+            }
+
+            // Build and show the modal
+            const modal = new ModalBuilder()
+                .setCustomId(`confession_modal_${mode}_${targetUserId}_${sourceGuildId}`)
+                .setTitle(mode === 'anon' ? '🎭 Anonymous Confession' : '👁️ Public Confession');
+
+            const confessionInput = new TextInputBuilder()
+                .setCustomId('confession_text')
+                .setLabel('Your Confession')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Write your confession here...')
+                .setMinLength(1)
+                .setMaxLength(1000)
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(confessionInput));
+
+            // Delete the prompt message and show the modal
+            await interaction.message.delete().catch(() => {});
+            return interaction.showModal(modal);
+        }
+
+        // ── CONFESSION: Modal Submission ────────────────────────────────────
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('confession_modal_')) {
+            const parts = interaction.customId.split('_');
+            // customId format: confession_modal_{mode}_{userId}_{guildId}
+            const mode = parts[2]; // 'anon' or 'known'
+            const targetUserId = parts[3];
+            const sourceGuildId = parts[4];
+            
+            const isAnonymous = mode === 'anon';
+            const confessionText = interaction.fields.getTextInputValue('confession_text').trim();
+
+            const sourceGuild = await client.guilds.fetch(sourceGuildId).catch(() => null);
+            if (!sourceGuild) {
+                return interaction.reply({
+                    content: '❌ The server from which you initiated the confession could not be found.',
+                    flags: [MessageFlags.Ephemeral]
+                });
+            }
+
+            const confessionSettings = dbSetup.getGuildSettings(sourceGuildId);
+            const confessionChannelId = confessionSettings.confession_channel_id;
+
+            if (!confessionChannelId) {
+                return interaction.reply({
+                    content: '❌ The confession channel is not configured on that server. Ask an admin to run `/setup channels`.',
+                    flags: [MessageFlags.Ephemeral]
+                });
+            }
+
+            const targetChannel = await sourceGuild.channels.fetch(confessionChannelId).catch(() => null);
+            if (!targetChannel || !targetChannel.isTextBased()) {
+                return interaction.reply({
+                    content: '❌ The configured confession channel was not found or was deleted.',
+                    flags: [MessageFlags.Ephemeral]
+                });
+            }
+
+            const confessionEmbed = new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setTitle('🎭 New Confession')
+                .setTimestamp()
+                .setFooter({ text: 'Amo India Confessions' });
+
+            if (isAnonymous) {
+                confessionEmbed.setDescription(confessionText);
+            } else {
+                confessionEmbed.setDescription(
+                    `**Confession by**: <@${targetUserId}> (\`${interaction.user.tag}\`)\n\n${confessionText}`
+                );
+            }
+
+            await targetChannel.send({ embeds: [confessionEmbed] });
+
+            return interaction.reply({
+                content: '✅ Your confession has been posted successfully!',
+                flags: [MessageFlags.Ephemeral]
+            });
+        }
 
         // Handle Setup components (Select menus and Buttons)
         if (interaction.isAnySelectMenu() || interaction.isButton()) {

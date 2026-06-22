@@ -90,7 +90,7 @@ module.exports = {
 
             // Response embed
             const embed = new EmbedBuilder()
-                .setColor(0x2b2d31)
+                .setColor(0xFEE75C)
                 .setTitle('🔒 Member Jailed | Amo India')
                 .setDescription(`Successfully jailed <@${targetMember.id}>. Manageable roles stripped.`)
                 .setTimestamp()
@@ -104,7 +104,7 @@ module.exports = {
                 const logChannel = message.guild.channels.cache.get(logChannelId);
                 if (logChannel && logChannel.isTextBased()) {
                     const logEmbed = new EmbedBuilder()
-                        .setColor(0x2b2d31)
+                        .setColor(0xFEE75C)
                         .setTitle('🛡️ Member Jailed | Amo India')
                         .addFields(
                             { name: 'Target User', value: `<@${targetMember.id}> (\`${targetMember.id}\`)` },
