@@ -11,11 +11,12 @@ module.exports = {
         }
 
         const initialEmbed = new EmbedBuilder()
-            .setColor(0x00AEFF)
-            .setTitle('✈️ Bot Migration Wizard')
+            .setColor(0x2b2d31)
+            .setTitle('✈️ Amo India | Bot Migration Wizard')
             .setDescription('Please provide the **Discord Invite Link** of the new server you wish to shift the bot to (within 60 seconds).\n\n' +
                              '*Example: `https://discord.gg/invitecode` or just `invitecode`*')
-            .setTimestamp();
+            .setTimestamp()
+            .setFooter({ text: 'Amo India Migration Portal' });
 
         const askMsg = await message.channel.send({ embeds: [initialEmbed] }).catch(() => null);
         if (!askMsg) return;
@@ -52,8 +53,8 @@ module.exports = {
                 const botInviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${message.client.user.id}&permissions=8&scope=bot%20applications.commands`;
 
                 const finalEmbed = new EmbedBuilder()
-                    .setColor(0x00FF88)
-                    .setTitle('🚀 Migration Configured & Initiated')
+                    .setColor(0x57F287)
+                    .setTitle('🚀 Migration Configured & Initiated | Amo India')
                     .setDescription(`The bot has cleared all configurations for **${message.guild.name}**.\n\n` +
                                      `**Target Server**: **${targetGuildName}** (ID: \`${targetGuildId}\`)\n\n` +
                                      (isAlreadyInGuild 
@@ -62,7 +63,8 @@ module.exports = {
                                      `\n\n**Next Steps**:\n` +
                                      `1. Add the bot to the new server (if not already added).\n` +
                                      `2. Go to the new server and run the **/setup** slash command to configure channels, roles, and counters interactively.`)
-                    .setTimestamp();
+                    .setTimestamp()
+                    .setFooter({ text: 'Amo India Migration Portal' });
 
                 await message.channel.send({ embeds: [finalEmbed] }).catch(() => {});
             } catch (err) {

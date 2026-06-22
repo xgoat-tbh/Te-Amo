@@ -75,10 +75,11 @@ module.exports = {
 
             // Response embed
             const embed = new EmbedBuilder()
-                .setColor(0x00FF88)
-                .setTitle('🔓 Member Unjailed')
+                .setColor(0x57F287)
+                .setTitle('🔓 Member Unjailed | Amo India')
                 .setDescription(`Successfully unjailed <@${targetMember.id}>. Roles restored.`)
-                .setTimestamp();
+                .setTimestamp()
+                .setFooter({ text: 'Amo India Moderation' });
 
             await message.reply({ embeds: [embed] }).catch(() => {});
 
@@ -88,14 +89,15 @@ module.exports = {
                 const logChannel = message.guild.channels.cache.get(logChannelId);
                 if (logChannel && logChannel.isTextBased()) {
                     const logEmbed = new EmbedBuilder()
-                        .setColor(0x00FF88)
-                        .setTitle('🛡️ Member Unjailed')
+                        .setColor(0x57F287)
+                        .setTitle('🛡️ Member Unjailed | Amo India')
                         .addFields(
                             { name: 'Target User', value: `<@${targetMember.id}> (\`${targetMember.id}\`)` },
                             { name: 'Moderator', value: `<@${message.author.id}>` },
                             { name: 'Restored Roles', value: rolesToAdd.map(id => `<@&${id}>`).join(', ') || 'None' }
                         )
-                        .setTimestamp();
+                        .setTimestamp()
+                        .setFooter({ text: 'Amo India Moderation' });
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
             }

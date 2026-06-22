@@ -38,11 +38,12 @@ module.exports = {
 
                 // Send level up notice
                 const embed = new EmbedBuilder()
-                    .setColor(0x00FF88)
-                    .setTitle('🎉 Level Up!')
+                    .setColor(0x57F287)
+                    .setTitle('🎉 Level Up! | Amo India')
                     .setDescription(`Congratulations <@${userId}>! You've reached **Level ${levelToSave}**! 🚀`)
                     .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
-                    .setTimestamp();
+                    .setTimestamp()
+                    .setFooter({ text: 'Amo India Leveling' });
 
                 const lvlMsg = await message.channel.send({ embeds: [embed] }).catch(() => null);
                 if (lvlMsg) {

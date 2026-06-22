@@ -90,10 +90,11 @@ module.exports = {
 
             // Response embed
             const embed = new EmbedBuilder()
-                .setColor(0x333333)
-                .setTitle('🔒 Member Jailed')
+                .setColor(0x2b2d31)
+                .setTitle('🔒 Member Jailed | Amo India')
                 .setDescription(`Successfully jailed <@${targetMember.id}>. Manageable roles stripped.`)
-                .setTimestamp();
+                .setTimestamp()
+                .setFooter({ text: 'Amo India Moderation' });
 
             await message.reply({ embeds: [embed] }).catch(() => {});
 
@@ -103,14 +104,15 @@ module.exports = {
                 const logChannel = message.guild.channels.cache.get(logChannelId);
                 if (logChannel && logChannel.isTextBased()) {
                     const logEmbed = new EmbedBuilder()
-                        .setColor(0x333333)
-                        .setTitle('🛡️ Member Jailed')
+                        .setColor(0x2b2d31)
+                        .setTitle('🛡️ Member Jailed | Amo India')
                         .addFields(
                             { name: 'Target User', value: `<@${targetMember.id}> (\`${targetMember.id}\`)` },
                             { name: 'Moderator', value: `<@${message.author.id}>` },
                             { name: 'Backup Roles', value: originalRoles.map(id => `<@&${id}>`).join(', ') || 'None' }
                         )
-                        .setTimestamp();
+                        .setTimestamp()
+                        .setFooter({ text: 'Amo India Moderation' });
                     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
                 }
             }

@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
     name: 'help',
@@ -7,6 +7,14 @@ module.exports = {
     async execute(message, args, config, settings) {
         const prefix = settings.prefix || '?';
         const commands = message.client.commands;
+
+        // Check if user has moderation/permit authorization
+        const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
+        const isMod = message.member.permissions.has(PermissionFlagsBits.ModerateMembers) ||
+                      message.member.permissions.has(PermissionFlagsBits.ManageRoles) ||
+                      message.member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                      message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+                      (permitRoleId && message.member.roles.cache.has(permitRoleId));
 
         // CASE 1: Detailed help lookup
         if (args.length > 0) {
@@ -18,10 +26,16 @@ module.exports = {
                 return message.reply(`❌ Command \`${searchName}\` was not found.`).catch(() => {});
             }
 
+            // Hide moderation/admin commands from non-mods
+            const isRestrictedCategory = ['admin', 'moderation'].includes(command.category?.toLowerCase());
+            if (isRestrictedCategory && !isMod) {
+                return message.reply(`❌ Command \`${searchName}\` was not found.`).catch(() => {});
+            }
+
             const cleanUsage = command.usage ? command.usage.replace(/^\?/, prefix) : `${prefix}${command.name}`;
 
             const embed = new EmbedBuilder()
-                .setColor(0x00AEFF)
+                .setColor(0x2b2d31) // Discord native dark theme background color
                 .setTitle(`ℹ️ Command Info: \`${prefix}${command.name}\``)
                 .addFields(
                     { name: '📋 Description', value: command.description || '*No description provided.*' },
@@ -29,7 +43,7 @@ module.exports = {
                     { name: '⚙️ Usage', value: `\`${cleanUsage}\``, inline: false }
                 )
                 .setTimestamp()
-                .setFooter({ text: 'Te-Amo Assistant', iconURL: message.guild.iconURL() });
+                .setFooter({ text: 'Amo India Assistant', iconURL: message.guild.iconURL() });
 
             if (command.aliases && command.aliases.length > 0) {
                 embed.addFields({
@@ -45,9 +59,16 @@ module.exports = {
         // CASE 2: General help command list
         const categories = {};
 
-        // Group commands by their category subfolder
+        // Group commands by their category subfolder, respecting permissions
         commands.forEach(command => {
             const cat = command.category || 'other';
+            const isRestrictedCategory = ['admin', 'moderation'].includes(cat.toLowerCase());
+            
+            // If they are not a mod, skip adding admin/moderation categories
+            if (isRestrictedCategory && !isMod) {
+                return;
+            }
+
             if (!categories[cat]) {
                 categories[cat] = [];
             }
@@ -55,11 +76,11 @@ module.exports = {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0x00AEFF)
-            .setTitle('📖 Te-Amo Command Guide')
+            .setColor(0x2b2d31) // Discord native dark theme background color
+            .setTitle('📖 Amo India Command Guide')
             .setDescription(`Dynamic system commands guide. Use \`${prefix}help <command>\` for detailed usage.\nActive command prefix is: \`${prefix}\``)
             .setTimestamp()
-            .setFooter({ text: 'Te-Amo Assistant', iconURL: message.guild.iconURL() });
+            .setFooter({ text: 'Amo India Assistant', iconURL: message.guild.iconURL() });
 
         // Add fields for each category
         for (const [category, cmdList] of Object.entries(categories)) {
@@ -75,13 +96,17 @@ module.exports = {
             });
         }
 
-        embed.addFields({
-            name: '⚙️ SLASH CONFIGURATION COMMANDS',
-            value: '• `/settings` - Edit dynamic configurations (prefix, log channel, jail role, permit role, member counter)\n' +
-                   '• `/setup system` - Interactive setup panel utilizing dropdown select menus and buttons to configure server systems\n' +
-                   '• `/setup leveling` - Map Discord roles to the 10 leveling milestones dynamically stored in SQLite',
-            inline: false
-        });
+        // Add slash commands summary to help ONLY if they are a mod
+        if (isMod) {
+            embed.addFields({
+                name: '⚙️ SLASH CONFIGURATION COMMANDS',
+                value: '• `/settings` - Edit dynamic configurations (prefix, log channel, jail role, permit role, member counter)\n' +
+                       '• `/setup core` - Interactive dashboard utilizing select menus and buttons to configure log channel, jail role, and permit role\n' +
+                       '• `/setup channels` - Interactive dashboard utilizing select menus and buttons to configure counter, confession, and suggestion channels\n' +
+                       '• `/setup leveling` - Map Discord roles to the 10 leveling milestones dynamically stored in SQLite',
+                inline: false
+            });
+        }
 
         return message.reply({ embeds: [embed] }).catch(() => {});
     }

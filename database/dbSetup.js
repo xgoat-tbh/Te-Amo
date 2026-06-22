@@ -16,7 +16,19 @@ db.exec(`
     log_channel_id TEXT,
     jail_role_id TEXT,
     auth_role_id TEXT,
-    member_counter_channel_id TEXT
+    member_counter_channel_id TEXT,
+    confession_channel_id TEXT,
+    suggestion_channel_id TEXT,
+    role_level_1 TEXT,
+    role_level_5 TEXT,
+    role_level_10 TEXT,
+    role_level_15 TEXT,
+    role_level_20 TEXT,
+    role_level_30 TEXT,
+    role_level_40 TEXT,
+    role_level_50 TEXT,
+    role_level_75 TEXT,
+    role_level_100 TEXT
   );
 
   CREATE TABLE IF NOT EXISTS jailed_users (
@@ -45,26 +57,37 @@ db.exec(`
     guild_id TEXT
   );
 
-  CREATE TABLE IF NOT EXISTS guild_level_roles (
-    guild_id TEXT PRIMARY KEY,
-    role_level_1 TEXT,
-    role_level_5 TEXT,
-    role_level_10 TEXT,
-    role_level_15 TEXT,
-    role_level_20 TEXT,
-    role_level_30 TEXT,
-    role_level_40 TEXT,
-    role_level_50 TEXT,
-    role_level_75 TEXT,
-    role_level_100 TEXT
+  CREATE TABLE IF NOT EXISTS suggestions (
+    suggestion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT,
+    author_id TEXT,
+    status TEXT DEFAULT 'Pending'
   );
 `);
 
-// --- MIGRATION CHECK FOR ALIAS DESCRIPTION & COUNTER COLUMN ---
-try {
-    db.exec('ALTER TABLE guild_settings ADD COLUMN member_counter_channel_id TEXT;');
-} catch (e) {
-    // ignore if column exists
+// --- MIGRATION CHECK FOR GUILD SETTINGS COLUMNS ---
+const alterColumns = [
+    'member_counter_channel_id',
+    'confession_channel_id',
+    'suggestion_channel_id',
+    'role_level_1',
+    'role_level_5',
+    'role_level_10',
+    'role_level_15',
+    'role_level_20',
+    'role_level_30',
+    'role_level_40',
+    'role_level_50',
+    'role_level_75',
+    'role_level_100'
+];
+
+for (const col of alterColumns) {
+    try {
+        db.exec(`ALTER TABLE guild_settings ADD COLUMN ${col} TEXT;`);
+    } catch (e) {
+        // ignore if column exists
+    }
 }
 
 try {
@@ -214,7 +237,7 @@ async function ensureJailSystem(guild) {
             jailRole = await guild.roles.create({
                 name: 'Jailed',
                 permissions: [],
-                reason: 'Auto-created Jailed role by Te-Amo'
+                reason: 'Auto-created Jailed role by Amo India'
             });
         }
         // Save jail role ID in settings
@@ -286,19 +309,18 @@ async function ensureJailSystem(guild) {
 }
 
 function getLevelRoles(guildId) {
-    const stmt = db.prepare('SELECT * FROM guild_level_roles WHERE guild_id = ?');
-    return stmt.get(guildId) || null;
+    return getGuildSettings(guildId);
 }
 
 function updateLevelRoles(guildId, roleMap) {
+    getGuildSettings(guildId);
     const stmt = db.prepare(`
-        INSERT OR REPLACE INTO guild_level_roles (
-            guild_id, role_level_1, role_level_5, role_level_10, role_level_15, role_level_20,
-            role_level_30, role_level_40, role_level_50, role_level_75, role_level_100
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        UPDATE guild_settings 
+        SET role_level_1 = ?, role_level_5 = ?, role_level_10 = ?, role_level_15 = ?, role_level_20 = ?,
+            role_level_30 = ?, role_level_40 = ?, role_level_50 = ?, role_level_75 = ?, role_level_100 = ?
+        WHERE guild_id = ?
     `);
     return stmt.run(
-        guildId,
         roleMap.level_1,
         roleMap.level_5,
         roleMap.level_10,
@@ -308,8 +330,45 @@ function updateLevelRoles(guildId, roleMap) {
         roleMap.level_40,
         roleMap.level_50,
         roleMap.level_75,
-        roleMap.level_100
+        roleMap.level_100,
+        guildId
     );
+}
+
+function updateCoreSetup(guildId, logChannelId, jailRoleId, authRoleId) {
+    getGuildSettings(guildId);
+    const stmt = db.prepare(`
+        UPDATE guild_settings 
+        SET log_channel_id = ?, jail_role_id = ?, auth_role_id = ? 
+        WHERE guild_id = ?
+    `);
+    return stmt.run(logChannelId, jailRoleId, authRoleId, guildId);
+}
+
+function updateChannelsSetup(guildId, memberCounterId, confessionId, suggestionId) {
+    getGuildSettings(guildId);
+    const stmt = db.prepare(`
+        UPDATE guild_settings 
+        SET member_counter_channel_id = ?, confession_channel_id = ?, suggestion_channel_id = ? 
+        WHERE guild_id = ?
+    `);
+    return stmt.run(memberCounterId, confessionId, suggestionId, guildId);
+}
+
+function addSuggestion(messageId, authorId) {
+    const stmt = db.prepare('INSERT INTO suggestions (message_id, author_id) VALUES (?, ?)');
+    const info = stmt.run(messageId, authorId);
+    return info.lastInsertRowid;
+}
+
+function getSuggestion(suggestionId) {
+    const stmt = db.prepare('SELECT * FROM suggestions WHERE suggestion_id = ?');
+    return stmt.get(suggestionId);
+}
+
+function updateSuggestionStatus(suggestionId, status) {
+    const stmt = db.prepare('UPDATE suggestions SET status = ? WHERE suggestion_id = ?');
+    return stmt.run(status, suggestionId);
 }
 
 module.exports = {
@@ -334,5 +393,10 @@ module.exports = {
     removeMonitoredVc,
     ensureJailSystem,
     getLevelRoles,
-    updateLevelRoles
+    updateLevelRoles,
+    updateCoreSetup,
+    updateChannelsSetup,
+    addSuggestion,
+    getSuggestion,
+    updateSuggestionStatus
 };

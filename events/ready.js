@@ -106,11 +106,16 @@ module.exports = {
 
             const setupCommand = {
                 name: 'setup',
-                description: 'Configure bot systems and leveling milestones',
+                description: 'Configure bot core systems, channels, and leveling milestones',
                 options: [
                     {
-                        name: 'system',
-                        description: 'Interactive dashboard to configure logging, jail, permit, and member counter',
+                        name: 'core',
+                        description: 'Interactive dashboard to configure logging, jail, and permit roles',
+                        type: 1 // SUB_COMMAND
+                    },
+                    {
+                        name: 'channels',
+                        description: 'Interactive dashboard to configure member counter, confession, and suggestion channels',
                         type: 1 // SUB_COMMAND
                     },
                     {
@@ -173,11 +178,12 @@ module.exports = {
 
                                 // Level Up Notice
                                 const embed = new EmbedBuilder()
-                                    .setColor(0x00FF88)
-                                    .setTitle('🎉 Level Up!')
+                                    .setColor(0x57F287)
+                                    .setTitle('🎉 Level Up! | Amo India')
                                     .setDescription(`Congratulations <@${member.user.id}>! You reached **Level ${levelToSave}** via voice!`)
                                     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                                    .setTimestamp();
+                                    .setTimestamp()
+                                    .setFooter({ text: 'Amo India Leveling' });
 
                                 await member.send({ embeds: [embed] }).catch(() => {
                                     const settings = dbSetup.getGuildSettings(guild.id);

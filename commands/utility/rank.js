@@ -49,7 +49,7 @@ module.exports = {
         const progressBar = '🟩'.repeat(filled) + '⬜'.repeat(empty);
 
         const embed = new EmbedBuilder()
-            .setColor(0x00FFAA)
+            .setColor(0x2b2d31)
             .setTitle(`📈 Rank Card - ${targetUser.username}`)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
             .addFields(
@@ -58,7 +58,7 @@ module.exports = {
                 { name: '📊 XP Progress', value: `\`${xp} / ${nextXpNeeded} XP\` (${percentage}%)`, inline: false },
                 { name: 'Progress Bar', value: `${progressBar}`, inline: false }
             )
-            .setFooter({ text: 'Te-Amo Leveling Loop', iconURL: message.guild.iconURL() })
+            .setFooter({ text: 'Amo India Leveling Loop', iconURL: message.guild.iconURL() })
             .setTimestamp();
 
         return message.reply({ embeds: [embed] }).catch(() => {});

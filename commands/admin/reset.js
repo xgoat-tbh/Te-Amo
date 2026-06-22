@@ -11,8 +11,8 @@ module.exports = {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0xFF0000)
-            .setTitle('🚨 CRITICAL WARNING: Complete Bot Reset')
+            .setColor(0xED4245)
+            .setTitle('🚨 Amo India | CRITICAL WARNING: Complete Bot Reset')
             .setDescription('Running this command will **permanently delete all data** associated with this bot across ALL tables, including:\n\n' +
                              '• Guild configurations & setup profiles\n' +
                              '• Member levels, XP, and leaderboards\n' +
@@ -20,7 +20,8 @@ module.exports = {
                              '• Voice channel tracking configurations\n' +
                              '• Active jailed user backups\n\n' +
                              'Type **`confirm`** within 30 seconds to proceed with the complete wipe. This action **CANNOT** be undone!')
-            .setTimestamp();
+            .setTimestamp()
+            .setFooter({ text: 'Amo India Administration' });
 
         const warnMsg = await message.channel.send({ embeds: [embed] }).catch(() => null);
         if (!warnMsg) return;
@@ -44,10 +45,11 @@ module.exports = {
                 dbSetup.db.prepare('DELETE FROM monitored_vcs').run();
 
                 const successEmbed = new EmbedBuilder()
-                    .setColor(0x00FF88)
-                    .setTitle('✅ Database Reset Successful')
+                    .setColor(0x57F287)
+                    .setTitle('✅ Database Reset Successful | Amo India')
                     .setDescription('The entire SQLite database has been purged. All settings, levels, tracking registries, and aliases have been wiped clean.')
-                    .setTimestamp();
+                    .setTimestamp()
+                    .setFooter({ text: 'Amo India Administration' });
 
                 await message.channel.send({ embeds: [successEmbed] }).catch(() => {});
             } catch (err) {

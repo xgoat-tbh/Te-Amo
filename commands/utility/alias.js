@@ -106,10 +106,10 @@ module.exports = {
             }
 
             const embed = new EmbedBuilder()
-                .setColor(0x5865F2)
+                .setColor(0x2b2d31)
                 .setTitle('🎭 Configured Role Aliases')
                 .setTimestamp()
-                .setFooter({ text: 'Te-Amo Assistant', iconURL: message.guild.iconURL() });
+                .setFooter({ text: 'Amo India Assistant', iconURL: message.guild.iconURL() });
 
             let desc = '';
             aliases.forEach(record => {

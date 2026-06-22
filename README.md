@@ -1,15 +1,15 @@
-# Te-Amo Discord Bot - Modular SQLite Edition
+# Amo India Discord Bot - Modular SQLite Edition
 
-A production-ready, highly modular, and secure Discord bot built with `discord.js` v14. Using `better-sqlite3` for local state storage, it implements a leveling system, specialized moderation and jail structures, role alias protocols, dynamic help guides, and advanced voice channel movement utilities.
+A production-ready, highly modular, and secure Discord bot built with `discord.js` v14. Using `better-sqlite3` for local state storage, it implements a leveling system, specialized moderation and jail structures, role alias protocols, dynamic help guides, confessions, suggestions, fun commands, and advanced voice channel movement utilities.
 
 ---
 
 ## Directory Structure
 
 ```
-/Te-Amo
+/Amo-India
 ├── /database
-│   └── dbSetup.js           <-- SQLite table schemas and CRUD functions
+│   └── dbSetup.js           <-- SQLite table schemas, migrations, and CRUD functions
 ├── /commands
 │   ├── /moderation
 │   │   ├── kick.js          <-- Kick command
@@ -24,11 +24,19 @@ A production-ready, highly modular, and secure Discord bot built with `discord.j
 │   │   ├── shift.js         <-- Migrate bot to new server via invite (Owner-only)
 │   │   ├── trackvc.js       <-- Monitor VC player milestone pings
 │   │   └── untrackvc.js     <-- Disable VC milestone monitoring
+│   ├── /fun
+│   │   ├── 8ball.js         <-- Magic 8-ball question RNG
+│   │   ├── coinflip.js      <-- Coinflip RNG
+│   │   ├── hug.js           <-- Target hug anime GIF embed
+│   │   ├── kiss.js          <-- Target kiss anime GIF embed
+│   │   └── slap.js          <-- Target slap anime GIF embed
 │   └── /utility
 │       ├── rank.js          <-- Display level, XP, and rank progress bar
 │       ├── leaderboard.js   <-- Display top 10 users ranked by level/XP
 │       ├── alias.js         <-- Manage role phrase aliases with custom descriptions
 │       ├── embed.js         <-- Discohook JSON payload embed sender
+│       ├── confession.js    <-- DM-based interactive confessions
+│       ├── suggest.js       <-- Suggestion box and approval/rejection manager
 │       └── help.js          <-- Dynamic categorizer & detailed command helper
 ├── /events
 │   ├── ready.js             <-- Slash registrations, voice XP checks, counter sync
@@ -36,7 +44,8 @@ A production-ready, highly modular, and secure Discord bot built with `discord.j
 │   ├── interactionCreate.js <-- Slash setups (interactive dropdown panel) and settings routing
 │   ├── voiceStateUpdate.js  <-- Game VC milestone pings and anti-abuse maps
 │   ├── guildMemberAdd.js    <-- Rejoin anti-jail check and member count updates
-│   └── guildMemberRemove.js <-- Member count updates
+│   ├── guildMemberRemove.js <-- Member count updates
+│   └── channelCreate.js     <-- Override permissions on new channels for Jailed role
 ├── config.json              <-- Static configurations & monitored voice maps
 ├── te-amo.db                <-- SQLite relational database file
 ├── index.js                 <-- Client bootstrap & recursive command loading
@@ -49,11 +58,12 @@ A production-ready, highly modular, and secure Discord bot built with `discord.j
 
 ### 1. SQLite Relational Database Storage
 Uses `better-sqlite3` for local, lightweight database operations. Contains these tables:
-- `guild_settings`: Guild prefixes, logging channel, jail role, permit role, and member counter channel.
+- `guild_settings`: Guild prefixes, logging channel, jail role, permit role, member counter channel, confession channel, suggestion channel, and 10 milestone role levels.
 - `jailed_users`: Traced user IDs of jailed members to prevent jail evasion on rejoin.
 - `role_aliases`: Text shortcuts mapped directly to role IDs with custom descriptions.
 - `user_levels`: Level and XP records along with structural message cooldowns.
 - `monitored_vcs`: Active VC voice milestones, target pings, and roles.
+- `suggestions`: Log of submitted suggestions, message IDs, author IDs, and status.
 
 ### 2. Hardcore Leveling Ecosystem
 - **Mathematical Grind**: Progression is calculated using the exponential formula:
@@ -71,30 +81,34 @@ Uses `better-sqlite3` for local, lightweight database operations. Contains these
   - `?jail @user`: Adds the Jailed role, strips manageable roles, and backs up their status.
   - `?unjail @user`: Manually strips Jailed role and restores original manageable roles.
   - **Rejoin Protection**: Triggers on `guildMemberAdd` to re-apply the jail status if a user leaves and rejoins.
+  - **New Channel Lockdown**: Triggers on `channelCreate` to automatically block the Jailed role from viewing newly created channels.
 
 ### 4. Interactive Slash Configuration & Setup
-- `/setup system`: Triggers a state-of-the-art interactive setup panel featuring custom Discord dropdown menus (select channels/roles) and action buttons (Save/Cancel). Allows live configuration of:
+- `/setup core`: Triggers an interactive setup panel featuring custom Discord dropdown menus and action buttons. Allows configuration of:
   - **Logging Channel** (Filtered to text channels)
   - **Jail Role** (Excludes `@everyone`)
   - **Permit/Authorization Role** (Excludes `@everyone`)
-  - **Member Counter Channel** (Filtered to voice channels, optional)
+- `/setup channels`: Triggers an interactive panel to configure features channels:
+  - **Member Counter Channel** (Filtered to voice channels)
+  - **Confession Channel** (Filtered to text channels)
+  - **Suggestion Channel** (Filtered to text channels)
 - `/setup leveling`: Set the 10 role options for the leveling milestone tiers (Level 1, 5, 10, 15, 20, 30, 40, 50, 75, 100) dynamically stored in the SQLite database.
-- `/settings`: Settings command to edit configuration values individually:
-  - `/settings prefix [new_prefix]`
-  - `/settings log_channel [channel]`
-  - `/settings jail_role [role]`
-  - `/settings auth_role [role]`
-  - `/settings member_counter [channel]`
+- `/settings`: Settings command to edit configuration values individually.
 
-### 5. Guild Migration & Database Purge Commands
+### 5. Advanced Features & Systems
+- **Confession Portal (`?confession`)**: Instantly deletes the trigger message. DMs the user with interactive buttons to choose between Anonymous and Public modes, collects the confession text, and posts it to the configured confession channel.
+- **Suggestion System (`?suggest`)**: Creates a pending suggestion card in the suggestions channel with upvote/downvote reactions. Moderators can run `?suggest respond <id> <approve/reject> <reason>` to update the status, which dynamically changes the embed color and appends mod notes.
+- **Fun Package**: Includes interactive commands like `?8ball <question>`, `?coinflip`, `?hug @user`, `?kiss @user`, and `?slap @user` with anime GIF integrations.
+
+### 6. Guild Migration & Database Purge Commands
 - `?shift`: Owner-only migration utility. Asks the owner to supply a server invite link, resolves it to verify server existence, provides bot authorize URLs, and wipes the *current* guild settings and channel mappings from SQLite (preserving level progress).
-- `?reset`: Owner-only purge utility. Prompts for absolute confirmation and wipes all SQLite tables completely (settings, levels, aliases, voice tracking, and jailed records).
+- `?reset`: Owner-only purge utility. Prompts for absolute confirmation and wipes all SQLite tables completely.
 
-### 6. Utilities & Movement
-- **Voice Movements (`?mv`)**: Moves caller VC, user to channel, or all to channel using regex matches (`/\D/g`) to resolve IDs, mentions, or partial names.
+### 7. Utilities & Movement
+- **Voice Movements (`?mv`)**: Moves caller VC, user to channel, or all to channel using regex matches to resolve IDs, mentions, or partial names.
 - **Lobby VC Tracker**: Fires text invite cards when VC user counts hit monitored milestones, with a 15-minute abuse rate limit.
-- **Discohook Loader**: Sends embeds from complex Discohook JSON payloads (`?embed send`).
-- **Detailed Help**: Dynamic categorizer displaying all commands, or usage instructions for a single command (`?help [command]`).
+- **Discohook Loader**: Sends embeds from complex Discohook JSON payloads.
+- **Detailed Help**: Dynamic, permission-aware helper. Restricts list and lookup of administrative/moderation commands to authorized members only.
 
 ---
 

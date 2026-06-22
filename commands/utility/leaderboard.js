@@ -13,10 +13,10 @@ module.exports = {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x00FFBB)
+            .setColor(0x2b2d31)
             .setTitle(`🏆 Server Leaderboard - Top 10`)
             .setTimestamp()
-            .setFooter({ text: 'Te-Amo Hardcore Grind', iconURL: message.guild.iconURL() });
+            .setFooter({ text: 'Amo India Hardcore Grind', iconURL: message.guild.iconURL() });
 
         let description = '';
 

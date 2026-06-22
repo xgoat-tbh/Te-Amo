@@ -15,11 +15,11 @@ const { updateMemberCounter } = require('./ready');
 
 const activeSetups = new Map();
 
-function getSetupDashboard(guild, session) {
+function getCoreSetupDashboard(guild, session) {
     const embed = new EmbedBuilder()
-        .setColor(0x00AEFF)
-        .setTitle('⚙️ Te-Amo Server Setup Wizard')
-        .setDescription('Configure your server logging, jail, permit roles, and member counters using the dropdown menus below.\n\n' +
+        .setColor(0x2b2d31)
+        .setTitle('⚙️ Amo India Core Setup Wizard')
+        .setDescription('Configure your server logging, jail, and permit roles using the dropdown menus below.\n\n' +
                          'All selections are ephemeral and will only be saved when you click **Save Configuration**.')
         .addFields(
             { 
@@ -36,15 +36,10 @@ function getSetupDashboard(guild, session) {
                 name: '⚙️ Permit Role', 
                 value: session.authRoleId ? `<@&${session.authRoleId}>` : '*Not Selected (Required)*', 
                 inline: true 
-            },
-            { 
-                name: '📊 Member Counter', 
-                value: session.memberCounterId ? `<#${session.memberCounterId}>` : '*Not Selected (Optional)*', 
-                inline: true 
             }
         )
         .setTimestamp()
-        .setFooter({ text: 'Te-Amo Setup Dashboard', iconURL: guild.iconURL() });
+        .setFooter({ text: 'Amo India Setup Dashboard', iconURL: guild.iconURL() });
 
     const logRow = new ActionRowBuilder().addComponents(
         new ChannelSelectMenuBuilder()
@@ -65,6 +60,46 @@ function getSetupDashboard(guild, session) {
             .setPlaceholder('Select Permit / Authorization Role ⚙️')
     );
 
+    const buttonRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('setup_core_confirm')
+            .setLabel('Save Configuration')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('setup_core_cancel')
+            .setLabel('Cancel Setup')
+            .setStyle(ButtonStyle.Danger)
+    );
+
+    return { embeds: [embed], components: [logRow, jailRow, authRow, buttonRow] };
+}
+
+function getChannelsSetupDashboard(guild, session) {
+    const embed = new EmbedBuilder()
+        .setColor(0x2b2d31)
+        .setTitle('⚙️ Amo India Features Setup Wizard')
+        .setDescription('Configure your server member counter, confession, and suggestion channels using the dropdown menus below.\n\n' +
+                         'All selections are ephemeral and will only be saved when you click **Save Configuration**.')
+        .addFields(
+            { 
+                name: '📊 Member Counter', 
+                value: session.memberCounterId ? `<#${session.memberCounterId}>` : '*Not Selected (Optional)*', 
+                inline: true 
+            },
+            { 
+                name: '🎭 Confession Channel', 
+                value: session.confessionId ? `<#${session.confessionId}>` : '*Not Selected (Optional)*', 
+                inline: true 
+            },
+            { 
+                name: '💡 Suggestion Channel', 
+                value: session.suggestionId ? `<#${session.suggestionId}>` : '*Not Selected (Optional)*', 
+                inline: true 
+            }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Amo India Setup Dashboard', iconURL: guild.iconURL() });
+
     const counterRow = new ActionRowBuilder().addComponents(
         new ChannelSelectMenuBuilder()
             .setCustomId('setup_member_counter')
@@ -72,18 +107,32 @@ function getSetupDashboard(guild, session) {
             .addChannelTypes(ChannelType.GuildVoice)
     );
 
+    const confessionRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_confession_channel')
+            .setPlaceholder('Select Confession Channel 🎭 (Optional)')
+            .addChannelTypes(ChannelType.GuildText)
+    );
+
+    const suggestionRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('setup_suggestion_channel')
+            .setPlaceholder('Select Suggestion Channel 💡 (Optional)')
+            .addChannelTypes(ChannelType.GuildText)
+    );
+
     const buttonRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('setup_confirm')
+            .setCustomId('setup_channels_confirm')
             .setLabel('Save Configuration')
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-            .setCustomId('setup_cancel')
+            .setCustomId('setup_channels_cancel')
             .setLabel('Cancel Setup')
             .setStyle(ButtonStyle.Danger)
     );
 
-    return { embeds: [embed], components: [logRow, jailRow, authRow, counterRow, buttonRow] };
+    return { embeds: [embed], components: [counterRow, confessionRow, suggestionRow, buttonRow] };
 }
 
 module.exports = {
@@ -97,7 +146,7 @@ module.exports = {
                 // Verify user is an administrator
                 if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                     return interaction.reply({
-                        content: '❌ You must have **Administrator** permissions to use settings/setup components.',
+                        content: '❌ You must have **Administrator** permissions to use setup components.',
                         flags: [MessageFlags.Ephemeral]
                     });
                 }
@@ -141,16 +190,23 @@ module.exports = {
                         session.authRoleId = selectedValue;
                     } else if (interaction.customId === 'setup_member_counter') {
                         session.memberCounterId = selectedValue;
+                    } else if (interaction.customId === 'setup_confession_channel') {
+                        session.confessionId = selectedValue;
+                    } else if (interaction.customId === 'setup_suggestion_channel') {
+                        session.suggestionId = selectedValue;
                     }
 
-                    // Update dashboard embed
-                    const dashboard = getSetupDashboard(interaction.guild, session);
+                    // Update correct dashboard embed
+                    const dashboard = session.type === 'core' 
+                        ? getCoreSetupDashboard(interaction.guild, session)
+                        : getChannelsSetupDashboard(interaction.guild, session);
+
                     return interaction.update(dashboard);
                 }
 
                 // Handle Buttons
                 if (interaction.isButton()) {
-                    if (interaction.customId === 'setup_cancel') {
+                    if (interaction.customId === 'setup_core_cancel' || interaction.customId === 'setup_channels_cancel') {
                         activeSetups.delete(guildId);
                         return interaction.update({
                             content: '❌ Setup cancelled. You can initiate a new setup with `/setup`.',
@@ -159,7 +215,7 @@ module.exports = {
                         });
                     }
 
-                    if (interaction.customId === 'setup_confirm') {
+                    if (interaction.customId === 'setup_core_confirm') {
                         if (!session.logChannelId || !session.jailRoleId || !session.authRoleId) {
                             return interaction.reply({
                                 content: '❌ Please select a Logging Channel, Jail Role, and Permit Role before saving.',
@@ -168,59 +224,58 @@ module.exports = {
                         }
 
                         // Save to database
-                        dbSetup.updateSetup(guildId, session.logChannelId, session.jailRoleId, session.authRoleId, session.memberCounterId);
+                        dbSetup.updateCoreSetup(guildId, session.logChannelId, session.jailRoleId, session.authRoleId);
 
                         // Dynamically configure category, Jailed role, and channel overrides
                         await interaction.deferUpdate();
                         await dbSetup.ensureJailSystem(interaction.guild).catch(console.error);
 
-                        // Sync member counter channel
-                        if (interaction.guild) {
-                            await updateMemberCounter(interaction.guild).catch(() => {});
-                        }
-
                         const settingsData = dbSetup.getGuildSettings(guildId);
                         const prefix = settingsData.prefix || '?';
 
                         const finalEmbed = new EmbedBuilder()
-                            .setColor(0x00FF88)
-                            .setTitle('⚙️ Server Setup & Capabilities Overview')
-                            .setDescription('The bot configuration has been successfully updated. Below is the active configuration and capabilities summary.')
+                            .setColor(0x57F287) // Success Green
+                            .setTitle('✅ Core Config Saved | Amo India')
+                            .setDescription('Your core bot settings have been updated successfully.')
                             .addFields(
-                                {
-                                    name: '🛠️ CONFIGURATION PARAMETERS',
-                                    value: `• **Logging Channel**: <#${session.logChannelId}>\n` +
-                                           `• **Jail Role**: <@&${session.jailRoleId}>\n` +
-                                           `• **Permit (Authorization) Role**: <@&${session.authRoleId}>\n` +
-                                           `• **Member Counter**: ${session.memberCounterId ? `<#${session.memberCounterId}>` : '*Not Configured*'}\n` +
-                                           `• **Standard Prefix**: \`${prefix}\``,
-                                    inline: false
-                                },
-                                {
-                                    name: '🏆 LEVELING SYSTEM',
-                                    value: `• **Grind Formula**: $XP = 100 \\times \\text{Level}^{2.5}$\n` +
-                                           `• **Chat XP**: 15–25 XP per message (60-second cooldown)\n` +
-                                           `• **Voice XP**: 10 XP per 5-minute interval (requires activity; self/server mute or deafen disqualifies)\n` +
-                                           `• **Milestone Roles Swapping**: Iterative roles swapping from **Commoner** (Lv. 1) to **Grandmaster** (Lv. 100) to prevent sidebar bloating.`,
-                                    inline: false
-                                },
-                                {
-                                    name: '🛡️ SPECIALIZED MODERATION',
-                                    value: `• **Moderation Commands**: \`${prefix}kick\`, \`${prefix}ban\`, \`${prefix}mute\` (supports smart duration parser e.g., \`10m\`, \`2h\`, \`1d\`)\n` +
-                                           `• **Jail Control**: \`${prefix}jail\` (assigns the jail role, strips standard roles) and \`${prefix}unjail\` (removes jail role, restores standard roles, bypasses leave-escape).`,
-                                    inline: false
-                                },
-                                {
-                                    name: '🎭 UTILITIES & CUSTOM TOOLS',
-                                    value: `• **Role Alias Protocol**: Custom triggers to toggle roles on members via permit authorization overrides (\`${prefix}alias create\`)\n` +
-                                           `• **VC Movement Tool (\`${prefix}mv\`)**: Moves voice members individually or collectively using regex VC resolution\n` +
-                                           `• **Voice Lobby Tracker**: Automated invite link triggers when VC user counts hit lobby milestones (with 15-minute anti-abuse map locks)\n` +
-                                           `• **Discohook Embed Loader**: Parse and send complex templates from Discohook exports using \`${prefix}embed send\`.`,
-                                    inline: false
-                                }
+                                { name: '📁 Logging Room', value: `<#${session.logChannelId}>`, inline: true },
+                                { name: '🔒 Jail Role', value: `<@&${session.jailRoleId}>`, inline: true },
+                                { name: '⚙️ Permit Role', value: `<@&${session.authRoleId}>`, inline: true }
                             )
                             .setTimestamp()
-                            .setFooter({ text: 'Te-Amo Assistant Setup Completed', iconURL: interaction.guild.iconURL() });
+                            .setFooter({ text: 'Amo India Core Setup', iconURL: interaction.guild.iconURL() });
+
+                        activeSetups.delete(guildId);
+
+                        return interaction.editReply({
+                            content: null,
+                            embeds: [finalEmbed],
+                            components: []
+                        });
+                    }
+
+                    if (interaction.customId === 'setup_channels_confirm') {
+                        // Save channels setup (all are optional)
+                        dbSetup.updateChannelsSetup(guildId, session.memberCounterId, session.confessionId, session.suggestionId);
+
+                        await interaction.deferUpdate();
+
+                        // Sync member counter channel
+                        if (session.memberCounterId && interaction.guild) {
+                            await updateMemberCounter(interaction.guild).catch(() => {});
+                        }
+
+                        const finalEmbed = new EmbedBuilder()
+                            .setColor(0x57F287) // Success Green
+                            .setTitle('✅ Feature Channels Saved | Amo India')
+                            .setDescription('Your feature channel allocations have been saved successfully.')
+                            .addFields(
+                                { name: '📊 Member Counter', value: session.memberCounterId ? `<#${session.memberCounterId}>` : '*Not Configured*', inline: true },
+                                { name: '🎭 Confession Channel', value: session.confessionId ? `<#${session.confessionId}>` : '*Not Configured*', inline: true },
+                                { name: '💡 Suggestion Channel', value: session.suggestionId ? `<#${session.suggestionId}>` : '*Not Configured*', inline: true }
+                            )
+                            .setTimestamp()
+                            .setFooter({ text: 'Amo India Channel Setup', iconURL: interaction.guild.iconURL() });
 
                         activeSetups.delete(guildId);
 
@@ -267,7 +322,7 @@ module.exports = {
             if (subcommand === 'log_channel') {
                 const newChannel = interaction.options.getChannel('channel');
                 logChannelId = newChannel.id;
-                dbSetup.updateSetup(guildId, logChannelId, jailRoleId, authRoleId, memberCounterId);
+                dbSetup.updateCoreSetup(guildId, logChannelId, jailRoleId, authRoleId);
                 return interaction.reply({
                     content: `✅ Logging channel has been updated to: <#${logChannelId}>`,
                     flags: [MessageFlags.Ephemeral]
@@ -283,7 +338,7 @@ module.exports = {
                     });
                 }
                 jailRoleId = newRole.id;
-                dbSetup.updateSetup(guildId, logChannelId, jailRoleId, authRoleId, memberCounterId);
+                dbSetup.updateCoreSetup(guildId, logChannelId, jailRoleId, authRoleId);
                 await dbSetup.ensureJailSystem(interaction.guild).catch(console.error);
                 return interaction.reply({
                     content: `✅ Jail role has been updated to: <@&${jailRoleId}> (and jail channels/overrides configured)`,
@@ -300,7 +355,7 @@ module.exports = {
                     });
                 }
                 authRoleId = newRole.id;
-                dbSetup.updateSetup(guildId, logChannelId, jailRoleId, authRoleId, memberCounterId);
+                dbSetup.updateCoreSetup(guildId, logChannelId, jailRoleId, authRoleId);
                 return interaction.reply({
                     content: `✅ Authorization permit role has been updated to: <@&${authRoleId}>`,
                     flags: [MessageFlags.Ephemeral]
@@ -310,11 +365,8 @@ module.exports = {
             if (subcommand === 'member_counter') {
                 const newChannel = interaction.options.getChannel('channel');
                 memberCounterId = newChannel.id;
-                dbSetup.updateSetup(guildId, logChannelId, jailRoleId, authRoleId, memberCounterId);
-                
-                // Trigger immediate update
+                dbSetup.updateChannelsSetup(guildId, memberCounterId, currentSettings.confession_channel_id, currentSettings.suggestion_channel_id);
                 await updateMemberCounter(interaction.guild);
-
                 return interaction.reply({
                     content: `✅ Member counter channel has been updated to: <#${memberCounterId}>`,
                     flags: [MessageFlags.Ephemeral]
@@ -325,8 +377,7 @@ module.exports = {
         if (commandName === 'setup') {
             const subcommand = interaction.options.getSubcommand();
 
-            if (subcommand === 'system') {
-                // Check if there is already an active session
+            if (subcommand === 'core') {
                 if (activeSetups.has(guildId)) {
                     return interaction.reply({
                         content: '⚠️ A setup session is already in progress. Please use the existing dashboard message to configure the bot.',
@@ -335,20 +386,37 @@ module.exports = {
                 }
 
                 const session = {
+                    type: 'core',
                     logChannelId: null,
                     jailRoleId: null,
                     authRoleId: null,
-                    memberCounterId: null,
                     interactionUserId: interaction.user.id
                 };
                 activeSetups.set(guildId, session);
 
-                const dashboard = getSetupDashboard(interaction.guild, session);
+                const dashboard = getCoreSetupDashboard(interaction.guild, session);
+                return interaction.reply({ ...dashboard, flags: [MessageFlags.Ephemeral] });
+            }
 
-                return interaction.reply({
-                    ...dashboard,
-                    flags: [MessageFlags.Ephemeral]
-                });
+            if (subcommand === 'channels') {
+                if (activeSetups.has(guildId)) {
+                    return interaction.reply({
+                        content: '⚠️ A setup session is already in progress. Please use the existing dashboard message to configure the bot.',
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                }
+
+                const session = {
+                    type: 'channels',
+                    memberCounterId: null,
+                    confessionId: null,
+                    suggestionId: null,
+                    interactionUserId: interaction.user.id
+                };
+                activeSetups.set(guildId, session);
+
+                const dashboard = getChannelsSetupDashboard(interaction.guild, session);
+                return interaction.reply({ ...dashboard, flags: [MessageFlags.Ephemeral] });
             }
 
             if (subcommand === 'leveling') {
@@ -365,7 +433,6 @@ module.exports = {
                     level_100: interaction.options.getRole('level_100').id
                 };
 
-                // Validate none of them is @everyone
                 for (const [key, value] of Object.entries(roleMap)) {
                     if (value === guildId) {
                         return interaction.reply({
@@ -379,8 +446,8 @@ module.exports = {
                     dbSetup.updateLevelRoles(guildId, roleMap);
                     
                     const successEmbed = new EmbedBuilder()
-                        .setColor(0x00FF88)
-                        .setTitle('🏆 Leveling Milestone Roles Configured')
+                        .setColor(0x57F287) // Green
+                        .setTitle('🏆 Leveling Milestone Roles Configured | Amo India')
                         .setDescription('The leveling milestone roles have been successfully updated and saved in the SQLite database.')
                         .addFields(
                             { name: 'Level 1 (Commoner)', value: `<@&${roleMap.level_1}>`, inline: true },
@@ -395,7 +462,7 @@ module.exports = {
                             { name: 'Level 100 (Grandmaster)', value: `<@&${roleMap.level_100}>`, inline: true }
                         )
                         .setTimestamp()
-                        .setFooter({ text: 'Te-Amo Leveling Setup', iconURL: interaction.guild.iconURL() });
+                        .setFooter({ text: 'Amo India Leveling Setup', iconURL: interaction.guild.iconURL() });
 
                     return interaction.reply({
                         embeds: [successEmbed],
