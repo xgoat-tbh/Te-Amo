@@ -6,11 +6,13 @@ module.exports = {
     description: 'Strip all roles from a user, assign the Jailed role, and back up roles to SQLite.',
     usage: '?jail @user',
     async execute(message, args, config, settings) {
-        // Check authorization (ModerateMembers/ManageRoles or Setup permit role)
-        const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
-        const isAuthorized = message.member.permissions.has(PermissionFlagsBits.ModerateMembers) ||
-                             message.member.permissions.has(PermissionFlagsBits.ManageRoles) ||
-                             (permitRoleId && message.member.roles.cache.has(permitRoleId));
+        // Check authorization (Default: ModerateMembers/ManageRoles/Admin/Permit Role, or custom override)
+        const defaultCheck = (m) => 
+            m.permissions.has(PermissionFlagsBits.ModerateMembers) ||
+            m.permissions.has(PermissionFlagsBits.ManageRoles) ||
+            m.permissions.has(PermissionFlagsBits.Administrator);
+
+        const isAuthorized = dbSetup.isAuthorizedForCommand(message.guild.id, 'jail', message.member, defaultCheck);
 
         if (!isAuthorized) {
             return message.reply('❌ You do not have the required permissions to use this command.').catch(() => {});

@@ -63,6 +63,14 @@ db.exec(`
     author_id TEXT,
     status TEXT DEFAULT 'Pending'
   );
+
+  CREATE TABLE IF NOT EXISTS command_permissions (
+    guild_id TEXT,
+    command_name TEXT,
+    target_id TEXT,
+    target_type TEXT,
+    PRIMARY KEY (guild_id, command_name, target_id)
+  );
 `);
 
 // --- MIGRATION CHECK FOR GUILD SETTINGS COLUMNS ---
@@ -366,9 +374,95 @@ function getSuggestion(suggestionId) {
     return stmt.get(suggestionId);
 }
 
-function updateSuggestionStatus(suggestionId, status) {
-    const stmt = db.prepare('UPDATE suggestions SET status = ? WHERE suggestion_id = ?');
-    return stmt.run(status, suggestionId);
+function grantCommandPermission(guildId, commandName, targetId, targetType) {
+    const stmt = db.prepare(`
+        INSERT OR REPLACE INTO command_permissions (guild_id, command_name, target_id, target_type)
+        VALUES (?, ?, ?, ?)
+    `);
+    return stmt.run(guildId, commandName.toLowerCase(), targetId, targetType);
+}
+
+function revokeCommandPermission(guildId, commandName, targetId) {
+    const stmt = db.prepare(`
+        DELETE FROM command_permissions 
+        WHERE guild_id = ? AND command_name = ? AND target_id = ?
+    `);
+    return stmt.run(guildId, commandName.toLowerCase(), targetId);
+}
+
+function getCommandPermissions(guildId, commandName) {
+    const stmt = db.prepare(`
+        SELECT * FROM command_permissions 
+        WHERE guild_id = ? AND command_name = ?
+    `);
+    return stmt.all(guildId, commandName.toLowerCase());
+}
+
+function hasAnyCustomPermissions(guildId, commandName) {
+    const stmt = db.prepare(`
+        SELECT 1 FROM command_permissions 
+        WHERE guild_id = ? AND command_name = ? LIMIT 1
+    `);
+    return !!stmt.get(guildId, commandName.toLowerCase());
+}
+
+function hasCustomPermission(guildId, commandName, member) {
+    commandName = commandName.toLowerCase();
+    
+    // 1. Check if user is Server Owner or Administrator or has the auth_role_id
+    if (member.id === member.guild.ownerId || member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return true;
+    }
+    
+    const settings = getGuildSettings(guildId);
+    const permitRoleId = settings.auth_role_id;
+    if (permitRoleId && member.roles.cache.has(permitRoleId)) {
+        return true;
+    }
+
+    // 2. Check if a specific user permission is granted
+    const userStmt = db.prepare(`
+        SELECT 1 FROM command_permissions 
+        WHERE guild_id = ? AND command_name = ? AND target_id = ? AND target_type = 'user'
+    `);
+    if (userStmt.get(guildId, commandName, member.id)) {
+        return true;
+    }
+
+    // 3. Check if any role of the member is granted permission
+    const roleIds = Array.from(member.roles.cache.keys());
+    if (roleIds.length > 0) {
+        const placeholders = roleIds.map(() => '?').join(',');
+        const roleStmt = db.prepare(`
+            SELECT 1 FROM command_permissions 
+            WHERE guild_id = ? AND command_name = ? AND target_id IN (${placeholders}) AND target_type = 'role'
+        `);
+        if (roleStmt.get(guildId, commandName, ...roleIds)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isAuthorizedForCommand(guildId, commandName, member, defaultCheckFn) {
+    // Owner, Admin, and Permit Role always bypass
+    if (member.id === member.guild.ownerId || member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return true;
+    }
+    const settings = getGuildSettings(guildId);
+    const permitRoleId = settings.auth_role_id;
+    if (permitRoleId && member.roles.cache.has(permitRoleId)) {
+        return true;
+    }
+
+    // Check custom permissions first
+    if (hasAnyCustomPermissions(guildId, commandName)) {
+        return hasCustomPermission(guildId, commandName, member);
+    }
+
+    // If no custom permissions configured, use default check
+    return defaultCheckFn ? defaultCheckFn(member) : true;
 }
 
 module.exports = {
@@ -398,5 +492,11 @@ module.exports = {
     updateChannelsSetup,
     addSuggestion,
     getSuggestion,
-    updateSuggestionStatus
+    updateSuggestionStatus,
+    grantCommandPermission,
+    revokeCommandPermission,
+    getCommandPermissions,
+    hasAnyCustomPermissions,
+    hasCustomPermission,
+    isAuthorizedForCommand
 };

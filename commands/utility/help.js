@@ -1,4 +1,5 @@
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const dbSetup = require('../../database/dbSetup');
 
 module.exports = {
     name: 'help',
@@ -26,9 +27,18 @@ module.exports = {
                 return message.reply(`❌ Command \`${searchName}\` was not found.`).catch(() => {});
             }
 
-            // Hide moderation/admin commands from non-mods
-            const isRestrictedCategory = ['admin', 'moderation'].includes(command.category?.toLowerCase());
-            if (isRestrictedCategory && !isMod) {
+            // Hide commands from unauthorized users based on default/custom permissions
+            const hasAccess = dbSetup.isAuthorizedForCommand(
+                message.guild.id, 
+                command.name, 
+                message.member, 
+                (m) => {
+                    const isRestricted = ['admin', 'moderation'].includes(command.category?.toLowerCase());
+                    return isRestricted ? isMod : true;
+                }
+            );
+
+            if (!hasAccess) {
                 return message.reply(`❌ Command \`${searchName}\` was not found.`).catch(() => {});
             }
 
@@ -62,10 +72,19 @@ module.exports = {
         // Group commands by their category subfolder, respecting permissions
         commands.forEach(command => {
             const cat = command.category || 'other';
-            const isRestrictedCategory = ['admin', 'moderation'].includes(cat.toLowerCase());
             
-            // If they are not a mod, skip adding admin/moderation categories
-            if (isRestrictedCategory && !isMod) {
+            // Check permissions dynamically
+            const hasAccess = dbSetup.isAuthorizedForCommand(
+                message.guild.id, 
+                command.name, 
+                message.member, 
+                (m) => {
+                    const isRestricted = ['admin', 'moderation'].includes(cat.toLowerCase());
+                    return isRestricted ? isMod : true;
+                }
+            );
+
+            if (!hasAccess) {
                 return;
             }
 

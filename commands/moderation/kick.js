@@ -1,14 +1,17 @@
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const dbSetup = require('../../database/dbSetup');
 
 module.exports = {
     name: 'kick',
     description: 'Kick a member from the server.',
     usage: '?kick @user [reason]',
     async execute(message, args, config, settings) {
-        // Check authorization (KickMembers permission or Setup permit role)
-        const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
-        const isAuthorized = message.member.permissions.has(PermissionFlagsBits.KickMembers) ||
-                             (permitRoleId && message.member.roles.cache.has(permitRoleId));
+        // Check authorization (Default: KickMembers/Admin/Permit Role, or custom override)
+        const defaultCheck = (m) => 
+            m.permissions.has(PermissionFlagsBits.KickMembers) ||
+            m.permissions.has(PermissionFlagsBits.Administrator);
+
+        const isAuthorized = dbSetup.isAuthorizedForCommand(message.guild.id, 'kick', message.member, defaultCheck);
 
         if (!isAuthorized) {
             return message.reply('❌ You do not have the required permissions to use this command.').catch(() => {});

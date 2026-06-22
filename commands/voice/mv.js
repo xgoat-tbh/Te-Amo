@@ -1,4 +1,5 @@
 const { PermissionFlagsBits } = require('discord.js');
+const dbSetup = require('../../database/dbSetup');
 
 function resolveChannel(guild, input) {
     // 1. If it's a mention or raw ID, extract digits
@@ -21,10 +22,16 @@ module.exports = {
     description: 'Move members between voice channels.',
     usage: '?mv, ?mv @user to <Channel>, or ?mv all to <Channel>',
     async execute(message, args, config, settings) {
-        // Check authorization (MoveMembers permission or Setup permit role)
-        const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
-        const isAuthorized = message.member.permissions.has(PermissionFlagsBits.MoveMembers) ||
-                             (permitRoleId && message.member.roles.cache.has(permitRoleId));
+        // Check authorization (Default: must be Moderator/Admin/Permit Role/MoveMembers, or have custom permission override)
+        const defaultCheck = (m) => 
+            m.permissions.has(PermissionFlagsBits.MoveMembers) && (
+                m.permissions.has(PermissionFlagsBits.ModerateMembers) ||
+                m.permissions.has(PermissionFlagsBits.ManageRoles) ||
+                m.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                m.permissions.has(PermissionFlagsBits.Administrator)
+            );
+
+        const isAuthorized = dbSetup.isAuthorizedForCommand(message.guild.id, 'mv', message.member, defaultCheck);
 
         if (!isAuthorized) {
             return message.reply('❌ You do not have the required permissions to use this command.').catch(() => {});

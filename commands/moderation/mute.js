@@ -1,4 +1,5 @@
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const dbSetup = require('../../database/dbSetup');
 
 function parseDuration(durationStr) {
     const match = durationStr.match(/^(\d+)([mhd])$/i);
@@ -19,10 +20,12 @@ module.exports = {
     description: 'Mute (Timeout) a member for a specified duration.',
     usage: '?mute @user <duration> [reason]',
     async execute(message, args, config, settings) {
-        // Check authorization (ModerateMembers permission or Setup permit role)
-        const permitRoleId = settings.auth_role_id || config.CAN_PROMOTE_ROLE_ID;
-        const isAuthorized = message.member.permissions.has(PermissionFlagsBits.ModerateMembers) ||
-                             (permitRoleId && message.member.roles.cache.has(permitRoleId));
+        // Check authorization (Default: ModerateMembers/Admin/Permit Role, or custom override)
+        const defaultCheck = (m) => 
+            m.permissions.has(PermissionFlagsBits.ModerateMembers) ||
+            m.permissions.has(PermissionFlagsBits.Administrator);
+
+        const isAuthorized = dbSetup.isAuthorizedForCommand(message.guild.id, 'mute', message.member, defaultCheck);
 
         if (!isAuthorized) {
             return message.reply('❌ You do not have the required permissions to use this command.').catch(() => {});
